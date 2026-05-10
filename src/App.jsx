@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
 
 const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
 
@@ -549,83 +549,105 @@ function MTable({title,list,days,table,setCell,C,sR,sD,sG,n2}){
   );
 }
 
-// ── Chart View ──
+// ── Chart View (no external library) ──
 function ChartView({MONTHS,mSum,hasData,getM,C,fmt,sR,sG}){
-  const [chartType,setChartType]=useState("monthly"); // monthly | compare
-  const [cmpM1,setCmpM1]=useState(MONTHS[3]);
-  const [cmpM2,setCmpM2]=useState(MONTHS[4]);
+  const [cmpM1,setCmpM1]=useState("ตุลาคม");
+  const [cmpM2,setCmpM2]=useState("พฤศจิกายน");
+  const [view,setView]=useState("bar"); // bar | compare
 
-  const monthlyData = MONTHS.map(m=>{
+  const data = MONTHS.map(m=>{
     const s=mSum(m);
-    return {name:m.slice(0,3),เทศบาล:+(s.t97+s.t3).toFixed(2),อบต:+(s.o97+s.o3).toFixed(2),รวม:+(s.t97+s.t3+s.o97+s.o3).toFixed(2)};
-  }).filter((_,i)=>hasData(MONTHS[i]));
+    return {m, t:s.t97+s.t3, o:s.o97+s.o3, total:s.t97+s.t3+s.o97+s.o3};
+  }).filter(d=>d.total>0);
 
-  const cmpData = ()=>{
+  const maxVal = Math.max(...data.map(d=>d.total), 1);
+
+  const cmpData = () => {
     const m1=getM(cmpM1), m2=getM(cmpM2);
-    const orgs=[...new Set([...m1.days.length?TESSABAN:[]])];
-    return TESSABAN.concat(OBT).map(org=>({
-      name:org.replace("เทศบาลตำบล","ทบ.").replace("เทศบาลเมือง","ทบ.ม.").replace("อบต.","อบต."),
-      [cmpM1]:+(sR(m1.table,org,m1.days,"p97")+sR(m1.table,org,m1.days,"p3")).toFixed(2),
-      [cmpM2]:+(sR(m2.table,org,m2.days,"p97")+sR(m2.table,org,m2.days,"p3")).toFixed(2),
-    })).filter(r=>r[cmpM1]>0||r[cmpM2]>0);
+    return [...TESSABAN,...OBT].map(org=>({
+      name: org.replace("เทศบาลตำบล","ทบ.").replace("เทศบาลเมือง","ทบ.ม."),
+      v1: +(sR(m1.table,org,m1.days,"p97")+sR(m1.table,org,m1.days,"p3")).toFixed(2),
+      v2: +(sR(m2.table,org,m2.days,"p97")+sR(m2.table,org,m2.days,"p3")).toFixed(2),
+    })).filter(r=>r.v1>0||r.v2>0);
   };
 
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{fontWeight:800,fontSize:17,color:C.blue,marginBottom:14}}>📈 กราฟแสดงยอด</div>
-      <div className="no-print" style={{display:"flex",gap:8,marginBottom:18}}>
-        <button onClick={()=>setChartType("monthly")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:chartType==="monthly"?C.blue:"#e2e8f0",color:chartType==="monthly"?"#fff":"#555"}}>📊 ยอดรายเดือน</button>
-        <button onClick={()=>setChartType("compare")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:chartType==="compare"?C.blue:"#e2e8f0",color:chartType==="compare"?"#fff":"#555"}}>🔄 เปรียบเทียบเดือน</button>
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        <button onClick={()=>setView("bar")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="bar"?C.blue:"#e2e8f0",color:view==="bar"?"#fff":"#555"}}>📊 ยอดรายเดือน</button>
+        <button onClick={()=>setView("compare")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="compare"?C.blue:"#e2e8f0",color:view==="compare"?"#fff":"#555"}}>🔄 เปรียบเทียบเดือน</button>
       </div>
 
-      {chartType==="monthly"&&<>
-        {monthlyData.length===0
-          ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📊</div><div>ยังไม่มีข้อมูลเดือนใด</div></div>
+      {view==="bar"&&(
+        data.length===0
+          ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📊</div><div>ยังไม่มีข้อมูล</div></div>
           :<div style={{background:"#fff",borderRadius:12,padding:"20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
-            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:16}}>ยอดรวมแต่ละเดือน (บาท)</div>
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={monthlyData} margin={{top:5,right:20,left:20,bottom:5}}>
-                <XAxis dataKey="name" tick={{fontSize:12,fontFamily:"Noto Sans Thai"}}/>
-                <YAxis tick={{fontSize:11}} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
-                <Tooltip formatter={(v,n)=>[fmt(v),n]} labelStyle={{fontFamily:"Noto Sans Thai"}}/>
-                <Legend wrapperStyle={{fontFamily:"Noto Sans Thai",fontSize:13}}/>
-                <Bar dataKey="เทศบาล" fill={C.blue} radius={[4,4,0,0]}/>
-                <Bar dataKey="อบต" fill={C.green} radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>}
-      </>}
-
-      {chartType==="compare"&&<>
-        <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",marginBottom:16,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-          <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:12}}>เลือกเดือนที่จะเปรียบเทียบ</div>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-            <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 1</div>
-              <select value={cmpM1} onChange={e=>setCmpM1(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
-                {MONTHS.map(m=><option key={m}>{m}</option>)}
-              </select></div>
-            <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 2</div>
-              <select value={cmpM2} onChange={e=>setCmpM2(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
-                {MONTHS.map(m=><option key={m}>{m}</option>)}
-              </select></div>
+            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:20}}>ยอดรวมแต่ละเดือน</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {data.map(({m,t,o,total})=>(
+                <div key={m}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                    <span style={{fontWeight:600,color:"#333"}}>{m}</span>
+                    <span style={{color:"#888"}}>{fmt(total)}</span>
+                  </div>
+                  <div style={{display:"flex",height:22,borderRadius:6,overflow:"hidden",background:"#f1f5f9"}}>
+                    <div style={{width:`${(t/maxVal)*100}%`,background:C.blue,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
+                      {t>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(t)}</span>}
+                    </div>
+                    <div style={{width:`${(o/maxVal)*100}%`,background:C.green,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
+                      {o>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(o)}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:16,marginTop:16,fontSize:12}}>
+              <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,background:C.blue,borderRadius:2,display:"inline-block"}}/>เทศบาล</span>
+              <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,background:C.green,borderRadius:2,display:"inline-block"}}/>อบต.</span>
+            </div>
           </div>
+      )}
+
+      {view==="compare"&&(
+        <div>
+          <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",marginBottom:16,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:12}}>เลือกเดือนที่จะเปรียบเทียบ</div>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 1</div>
+                <select value={cmpM1} onChange={e=>setCmpM1(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
+                  {MONTHS.map(m=><option key={m}>{m}</option>)}
+                </select></div>
+              <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 2</div>
+                <select value={cmpM2} onChange={e=>setCmpM2(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
+                  {MONTHS.map(m=><option key={m}>{m}</option>)}
+                </select></div>
+            </div>
+          </div>
+          {cmpData().length===0
+            ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔄</div><div>ยังไม่มีข้อมูลในเดือนที่เลือก</div></div>
+            :<div style={{background:"#fff",borderRadius:12,padding:"16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
+              <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:14}}>เปรียบเทียบ {cmpM1} vs {cmpM2}</div>
+              {(()=>{const cd=cmpData(); const mx=Math.max(...cd.map(r=>Math.max(r.v1,r.v2)),1); return cd.map(r=>(
+                <div key={r.name} style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#555",marginBottom:3}}>{r.name}</div>
+                  <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                    <div style={{width:50,fontSize:10,color:C.blue,textAlign:"right"}}>{r.v1>0?fmt(r.v1):"-"}</div>
+                    <div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}>
+                      <div style={{height:10,background:C.blue,borderRadius:3,width:`${(r.v1/mx)*100}%`}}/>
+                      <div style={{height:10,background:C.gold,borderRadius:3,width:`${(r.v2/mx)*100}%`}}/>
+                    </div>
+                    <div style={{width:50,fontSize:10,color:"#e8a020"}}>{r.v2>0?fmt(r.v2):"-"}</div>
+                  </div>
+                </div>
+              ));}())}
+              <div style={{display:"flex",gap:16,marginTop:12,fontSize:12}}>
+                <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:8,background:C.blue,borderRadius:2,display:"inline-block"}}/>{cmpM1}</span>
+                <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:8,background:C.gold,borderRadius:2,display:"inline-block"}}/>{cmpM2}</span>
+              </div>
+            </div>}
         </div>
-        {cmpData().length===0
-          ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔄</div><div>ยังไม่มีข้อมูลในเดือนที่เลือก</div></div>
-          :<div style={{background:"#fff",borderRadius:12,padding:"20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
-            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:16}}>เปรียบเทียบ {cmpM1} vs {cmpM2}</div>
-            <ResponsiveContainer width="100%" height={420}>
-              <BarChart data={cmpData()} layout="vertical" margin={{top:5,right:30,left:100,bottom:5}}>
-                <XAxis type="number" tick={{fontSize:11}} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
-                <YAxis type="category" dataKey="name" tick={{fontSize:10,fontFamily:"Noto Sans Thai"}} width={100}/>
-                <Tooltip formatter={(v,n)=>[fmt(v),n]} labelStyle={{fontFamily:"Noto Sans Thai"}}/>
-                <Legend wrapperStyle={{fontFamily:"Noto Sans Thai",fontSize:13}}/>
-                <Bar dataKey={cmpM1} fill={C.blue} radius={[0,4,4,0]}/>
-                <Bar dataKey={cmpM2} fill={C.gold} radius={[0,4,4,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>}
-      </>}
+      )}
     </div>
   );
 }
