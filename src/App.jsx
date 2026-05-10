@@ -19,8 +19,15 @@ const OBT = [
   "อบต.หนองไฮ","อบต.แก่งโดม","อบต.นาดี",
 ];
 const ALL = [...TESSABAN, ...OBT];
-const MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
-               "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+const MONTHS = ["ตุลาคม","พฤศจิกายน","ธันวาคม","มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน"];
+
+// ปีงบประมาณ: ต.ค.2567-ก.ย.2568 = "2568", ต.ค.2568-ก.ย.2569 = "2569"
+const currentFiscalYear = () => {
+  const now = new Date();
+  const m = now.getMonth()+1; // 1-12
+  const y = now.getFullYear()+543; // พ.ศ.
+  return m >= 10 ? String(y+1) : String(y);
+};
 
 const initM   = () => ({ days:[], table:{}, history:[] });
 const eCell   = () => ({ p97:"", p3:"" });
@@ -50,16 +57,21 @@ function findOrg(name) {
   return ALL.find(o=>{ const m=nm(o); return m===n||m.includes(n)||n.includes(m); })||null;
 }
 
-async function dbLoad() {
-  const {data,error}=await sb.from("monthly_data").select("*");
+async function dbLoad(fy) {
+  const {data,error}=await sb.from("monthly_data").select("*").like("month", `${fy}_%`);
   if(error) throw error;
   const out={};
-  (data||[]).forEach(r=>{out[r.month]={days:r.days||[],table:r.table_data||{},history:r.history||[]};});
+  (data||[]).forEach(r=>{
+    // key format: "2568_ตุลาคม"
+    const mon = r.month.includes("_") ? r.month.split("_")[1] : r.month;
+    out[mon]={days:r.days||[],table:r.table_data||{},history:r.history||[]};
+  });
   return out;
 }
-async function dbSave(month,data) {
+async function dbSave(month, data, fy) {
+  const key = `${fy}_${month}`;
   const {error}=await sb.from("monthly_data").upsert(
-    {month,days:data.days,table_data:data.table,history:data.history,updated_at:new Date().toISOString()},
+    {month:key, days:data.days, table_data:data.table, history:data.history, updated_at:new Date().toISOString()},
     {onConflict:"month"}
   );
   if(error) throw error;
@@ -124,9 +136,10 @@ const C = {blue:"#0f4c81",green:"#1a7a4a",gold:"#e8a020",red:"#c0392b",bg:"#f2f5
 export default function App() {
   const [ready,   setReady]   = useState(false);
   const [saving,  setSaving]  = useState("");
+  const [fiscalYear, setFiscalYear] = useState(currentFiscalYear);
   const [mainTab, setMainTab] = useState("monthly");
   const [subTab,  setSubTab]  = useState("import");
-  const [mon,     setMon]     = useState("พฤษภาคม");
+  const [mon,     setMon]     = useState("ตุลาคม");
   const [DB,      setDB]      = useState({});
   const [msg,     setMsg]     = useState(null);
   const [cmp,     setCmp]     = useState(null);
@@ -134,6 +147,11 @@ export default function App() {
   const [jDay,    setJDay]    = useState("");
   const [jErr,    setJErr]    = useState("");
   const [mDay,    setMDay]    = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [showDayModal, setShowDayModal] = useState(false);
+  const [pendingPdf,   setPendingPdf]   = useState(null);
+  const [pdfDay,       setPdfDay]       = useState("");
+  const fileRef = useRef(null);
   const dirty = useRef(null);
 
   const getM    = useCallback(m => DB[m]||initM(), [DB]);
@@ -145,9 +163,12 @@ export default function App() {
     dirty.current=m;
   },[]);
 
+  // Reload when fiscal year changes
   useEffect(()=>{
-    dbLoad().then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(console.error).finally(()=>setReady(true));
-  },[]);
+    setReady(false);
+    setDB({});
+    dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(console.error).finally(()=>setReady(true));
+  },[fiscalYear]);
 
   useEffect(()=>{
     if(!ready) return;
@@ -155,7 +176,7 @@ export default function App() {
       const m=dirty.current; if(!m) return; dirty.current=null;
       const md=DB[m]; if(!md) return;
       setSaving("saving");
-      try{ await dbSave(m,md); setSaving("saved"); setTimeout(()=>setSaving(""),2500); }
+      try{ await dbSave(m, md, fiscalYear); setSaving("saved"); setTimeout(()=>setSaving(""),2500); }
       catch(e){ console.error(e); setSaving("error"); }
     },1200);
     return()=>clearTimeout(t);
@@ -174,6 +195,66 @@ export default function App() {
   const setCell = useCallback((org,day,f,v)=>{
     setM(mon,c=>({...c,table:{...c.table,[org]:{...c.table[org],[day]:{...c.table[org]?.[day],[f]:v}}}}));
   },[mon,setM]);
+
+  // ── PDF Upload via Gemini ──
+  const handlePdfPick = (file) => {
+    if (!file) return;
+    const ok = file.type === 'application/pdf' || file.type.startsWith('image/');
+    if (!ok) { setMsg({ok:false,text:"รองรับเฉพาะ PDF และรูปภาพ"}); return; }
+    setPendingPdf(file);
+    setPdfDay("");
+    setShowDayModal(true);
+  };
+
+  const extractPdf = async (file, dayStr) => {
+    setShowDayModal(false);
+    setPdfLoading(true);
+    setMsg({ok:true,text:`⏳ Gemini กำลังอ่าน PDF วันที่ ${dayStr}...`});
+    try {
+      const b64 = await new Promise((res,rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+
+      const resp = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64: b64, mimeType: file.type })
+      });
+      const parsed = await resp.json();
+      if (!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
+      if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
+
+      // check duplicate
+      if (cur.history.find(h=>h.day===dayStr)) {
+        if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${mon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { setPdfLoading(false); return; }
+      }
+
+      setM(mon, c => {
+        const nd = c.days.includes(dayStr) ? c.days : srtDays([...c.days, dayStr]);
+        const nt = addDayTbl({...c.table}, dayStr);
+        parsed.rows.forEach(r => {
+          const f = findOrg(r.matched || r.name);
+          if (f && (r.p97 || r.p3)) nt[f][dayStr] = {p97: r.p97?String(r.p97):"", p3: r.p3?String(r.p3):""};
+        });
+        const nh = [...c.history.filter(h=>h.day!==dayStr),
+          {day:dayStr, total_p97:parsed.total_p97||0, total_p3:parsed.total_p3||0, total_amount:parsed.total_amount||0}
+        ].sort((a,b)=>parseInt(a.day)-parseInt(b.day));
+        return {...c, days:nd, table:nt, history:nh};
+      });
+
+      const matched = parsed.rows.filter(r=>findOrg(r.matched||r.name)).length;
+      setMsg({ok:true, text:`✅ Gemini อ่านสำเร็จ! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
+      setSubTab("monthtable");
+    } catch(e) {
+      setMsg({ok:false, text:`❌ ${e.message}`});
+    } finally {
+      setPdfLoading(false);
+      setPendingPdf(null);
+    }
+  };
 
   const doImport = () => {
     setJErr("");
@@ -222,9 +303,14 @@ export default function App() {
         <span style={{fontSize:22}}>🏛️</span>
         <div style={{flex:1}}>
           <div style={{fontWeight:800,fontSize:14}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
-          <div style={{fontSize:10,opacity:.75}}>ส่ง PDF ในแชท Claude → คัดลอก JSON → วางที่นี่</div>
+          <div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → คัดลอก JSON → วางที่นี่</div>
         </div>
         {saving&&<div style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾 บันทึก...":saving==="saved"?"✅ บันทึกแล้ว":"❌ บันทึกไม่ได้"}</div>}
+        {/* Fiscal year selector */}
+        <select value={fiscalYear} onChange={e=>{ setFiscalYear(e.target.value); setDB({}); setMon("ตุลาคม"); setReady(false); }}
+          style={{padding:"4px 8px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
+          {[2566,2567,2568,2569,2570].map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
+        </select>
         <div style={{display:"flex",gap:5}}>
           {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?C.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
@@ -256,11 +342,49 @@ export default function App() {
 
           {/* IMPORT */}
           {subTab==="import"&&<div style={{maxWidth:640,margin:"0 auto"}}>
-            <div style={{background:"linear-gradient(135deg,#e8f4fd,#f0f9ff)",borderRadius:12,padding:"14px 18px",marginBottom:14,border:"1px solid #bee3f8"}}>
-              <div style={{fontWeight:800,fontSize:14,color:C.blue,marginBottom:10}}>📖 วิธีนำเข้าข้อมูล</div>
-              {[["1️⃣","แนบไฟล์ PDF ในช่องแชท Claude (หน้าต่างนี้)"],["2️⃣","พิมพ์: อ่านข้อมูลจาก PDF นี้ให้เป็น JSON"],["3️⃣","คัดลอก JSON ที่ Claude ตอบกลับ"],["4️⃣","ระบุวันที่ + วาง JSON ด้านล่าง → กด นำเข้า"]].map(([n,t])=>(
-                <div key={n} style={{display:"flex",gap:8,marginBottom:6}}><span style={{fontSize:16,flexShrink:0}}>{n}</span><span style={{fontSize:13,color:"#2d5986",lineHeight:1.5}}>{t}</span></div>
-              ))}
+
+            {/* Day modal for PDF upload */}
+            {showDayModal&&(
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:"#fff",borderRadius:16,padding:"28px 28px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,0.25)"}}>
+                  <div style={{fontWeight:800,fontSize:20,color:C.blue,marginBottom:4}}>📅 วันที่ในเอกสาร</div>
+                  <div style={{fontSize:13,color:"#888",marginBottom:16}}>เดือน {mon} — วันที่เท่าไร?</div>
+                  <input type="text" inputMode="numeric" placeholder="เช่น 1, 15, 30" value={pdfDay}
+                    onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setPdfDay(v);}}
+                    onKeyDown={e=>{if(e.key==="Enter"&&pdfDay)extractPdf(pendingPdf,String(parseInt(pdfDay)));}}
+                    autoFocus
+                    style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?C.blue:"#d0d5dd"}`,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
+                  <div style={{display:"flex",gap:10}}>
+                    <button onClick={()=>setShowDayModal(false)} style={{flex:1,padding:10,border:"1px solid #ddd",borderRadius:10,background:"#f5f5f5",cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
+                    <button onClick={()=>{if(pdfDay)extractPdf(pendingPdf,String(parseInt(pdfDay)));}} disabled={!pdfDay}
+                      style={{flex:2,padding:10,background:pdfDay?C.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>
+                      🔍 อ่านข้อมูล
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PDF Upload Zone */}
+            <div
+              onDrop={e=>{e.preventDefault();handlePdfPick(e.dataTransfer.files[0]);}}
+              onDragOver={e=>e.preventDefault()}
+              onClick={()=>!pdfLoading&&fileRef.current?.click()}
+              style={{border:`2.5px dashed ${pdfLoading?"#aaa":C.blue}`,borderRadius:14,padding:"36px 24px",textAlign:"center",background:"#fff",cursor:pdfLoading?"default":"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",marginBottom:14}}>
+              <div style={{fontSize:46,marginBottom:10}}>{pdfLoading?"⏳":"📄"}</div>
+              <div style={{fontSize:17,fontWeight:800,color:pdfLoading?"#aaa":C.blue,marginBottom:6}}>
+                {pdfLoading?"Gemini กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
+              </div>
+              <div style={{fontSize:13,color:"#999"}}>รองรับ PDF · PNG · JPG · Gemini อ่านและจัดข้อมูลอัตโนมัติ (ฟรี)</div>
+              <input ref={fileRef} type="file" accept=".pdf,image/*" style={{display:"none"}}
+                onChange={e=>handlePdfPick(e.target.files[0])}/>
+            </div>
+
+            {/* Divider */}
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+              <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
+              <span style={{fontSize:12,color:"#aaa",fontWeight:600}}>หรือวาง JSON เอง</span>
+              <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
             </div>
             <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
               <div style={{fontWeight:800,fontSize:15,color:C.blue,marginBottom:14}}>📥 วาง JSON — เดือน{mon}</div>
