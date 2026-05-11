@@ -1,6 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-
 
 const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
 
@@ -21,22 +20,62 @@ const OBT = [
 const ALL = [...TESSABAN, ...OBT];
 const MONTHS = ["ตุลาคม","พฤศจิกายน","ธันวาคม","มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน"];
 
-// ปีงบประมาณ: ต.ค.2567-ก.ย.2568 = "2568", ต.ค.2568-ก.ย.2569 = "2569"
 const currentFiscalYear = () => {
   const now = new Date();
-  const m = now.getMonth()+1; // 1-12
-  const y = now.getFullYear()+543; // พ.ศ.
+  const m = now.getMonth()+1;
+  const y = now.getFullYear()+543;
   return m >= 10 ? String(y+1) : String(y);
 };
 
+const mkTheme = (dark) => ({
+  blue:  "#0f4c81",
+  green: "#1a7a4a",
+  gold:  "#e8a020",
+  red:   "#c0392b",
+  bg:        dark ? "#0f1117" : "#f2f5f8",
+  card:      dark ? "#1a1d23" : "#ffffff",
+  card2:     dark ? "#212530" : "#f8f9fa",
+  card3:     dark ? "#1e2230" : "#f1f5f9",
+  border:    dark ? "#2d3340" : "#e2e8f0",
+  border2:   dark ? "#3a404d" : "#d0d5dd",
+  borderHeavy: dark ? "#4a5568" : "#aac4e0",
+  text:      dark ? "#e2e8f0" : "#1a2744",
+  textMed:   dark ? "#94a3b8" : "#555",
+  textMute:  dark ? "#64748b" : "#888",
+  textFaint: dark ? "#475569" : "#aaa",
+  rowAlt:    dark ? "#161922" : "#fafbfc",
+  shadow:    dark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.07)",
+  shadow2:   dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.2)",
+  p97Bg:     dark ? "#1a2540" : "#f0f6ff",
+  p97Sum:    dark ? "#162035" : "#eff6ff",
+  p3Bg:      dark ? "#1e2128" : "#f9f9f9",
+  p3Sum:     dark ? "#1c1e22" : "#f3f3f3",
+  totRow:    dark ? "#0a0c10" : "#1a1a2e",
+  msgOkBg:   dark ? "#0d2b1a" : "#e6f9ee",
+  msgOkTxt:  dark ? "#4ade80" : "#1a6b38",
+  msgOkBdr:  dark ? "#166534" : "#9de0b6",
+  msgErrBg:  dark ? "#2b0d0d" : "#fde8e8",
+  msgErrTxt: dark ? "#f87171" : "#c0392b",
+  msgErrBdr: dark ? "#7f1d1d" : "#f5b7b1",
+  tblHeadTxt:dark ? "#94a3b8" : "#4a5568",
+  histBg:    dark ? "#0d2b1a" : "#f0fdf4",
+  histBdr:   dark ? "#166534" : "#86efac",
+});
+
 const initM   = () => ({ days:[], table:{}, history:[] });
-const eCell   = () => ({ p97:"", p3:"" });
 const srtDays = a => [...a].sort((x,y)=>parseInt(x)-parseInt(y));
 
 function addDayTbl(table, day) {
   const t = {...table};
-  ALL.forEach(o => { t[o] = {...(t[o]||{}), [day]: t[o]?.[day] || eCell()}; });
+  ALL.forEach(o => { t[o] = {...(t[o]||{}), [day]: t[o]?.[day] || {p97:"",p3:""}}; });
   return t;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
 }
 function rmDayTbl(table, day) {
   const t = {...table};
@@ -62,7 +101,6 @@ async function dbLoad(fy) {
   if(error) throw error;
   const out={};
   (data||[]).forEach(r=>{
-    // key format: "2568_ตุลาคม"
     const mon = r.month.includes("_") ? r.month.split("_")[1] : r.month;
     out[mon]={days:r.days||[],table:r.table_data||{},history:r.history||[]};
   });
@@ -77,17 +115,14 @@ async function dbSave(month, data, fy) {
   if(error) throw error;
 }
 
-// Excel export
 function exportExcel(mon, days, table) {
   const rows = [];
-  // header
   const h1 = ["หน่วยงาน"];
   const h2 = [""];
   days.forEach(d => { h1.push(`วันที่ ${d}`, ""); h2.push("97%","3%"); });
   h1.push("รวม 97%","รวม 3%","รวมทั้งหมด");
   h2.push("","","");
   rows.push(h1, h2);
-  // tessaban header
   rows.push(["เทศบาล"]);
   TESSABAN.forEach(org => {
     const row = [org];
@@ -96,7 +131,6 @@ function exportExcel(mon, days, table) {
     row.push(r97||"", r3||"", r97+r3||"");
     rows.push(row);
   });
-  // obt header
   rows.push(["อบต."]);
   OBT.forEach(org => {
     const row = [org];
@@ -105,68 +139,54 @@ function exportExcel(mon, days, table) {
     row.push(r97||"", r3||"", r97+r3||"");
     rows.push(row);
   });
-  // totals
   const tot = ["รวมทั้งหมด"];
   days.forEach(d => { tot.push(sD(table,d,ALL,"p97"), sD(table,d,ALL,"p3")); });
   tot.push(sG(table,ALL,days,"p97"), sG(table,ALL,days,"p3"), sG(table,ALL,days,"p97")+sG(table,ALL,days,"p3"));
   rows.push(tot);
-
-  // build CSV (simple, works everywhere)
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const bom = "\uFEFF";
-  const blob = new Blob([bom+csv], {type:"text/csv;charset=utf-8;"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `ยอดรายวัน_${mon}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${mon}.csv`);
 }
 
-// Backup export
 function exportBackup(DB) {
-  const json = JSON.stringify(DB, null, 2);
-  const blob = new Blob([json], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `backup_tessaban_${new Date().toISOString().slice(0,10)}.json`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadBlob(new Blob([JSON.stringify(DB, null, 2)], {type:"application/json"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.json`);
 }
-
-const C = {blue:"#0f4c81",green:"#1a7a4a",gold:"#e8a020",red:"#c0392b",bg:"#f2f5f8"};
 
 export default function App() {
-  const [ready,   setReady]   = useState(false);
-  const [saving,  setSaving]  = useState("");
+  const [isDark,   setIsDark]   = useState(() => localStorage.getItem("theme") === "dark");
+  const [ready,    setReady]    = useState(false);
+  const [saving,   setSaving]   = useState("");
   const [fiscalYear, setFiscalYear] = useState(currentFiscalYear);
-  const [mainTab, setMainTab] = useState("monthly");
-  const [subTab,  setSubTab]  = useState("import");
-  const [mon,     setMon]     = useState("ตุลาคม");
-  const [DB,      setDB]      = useState({});
-  const [msg,     setMsg]     = useState(null);
-  const [cmp,     setCmp]     = useState(null);
-  const [jText,   setJText]   = useState("");
-  const [jDay,    setJDay]    = useState("");
-  const [jErr,    setJErr]    = useState("");
-  const [mDay,    setMDay]    = useState("");
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [showDayModal, setShowDayModal] = useState(false);
-  const [pendingPdf,   setPendingPdf]   = useState(null);
-  const [pdfDay,       setPdfDay]       = useState("");
+  const [mainTab,  setMainTab]  = useState("monthly");
+  const [subTab,   setSubTab]   = useState("import");
+  const [mon,      setMon]      = useState("ตุลาคม");
+  const [DB,       setDB]       = useState({});
+  const [msg,      setMsg]      = useState(null);
+  const [mDay,     setMDay]     = useState("");
+  const [pdfLoading,    setPdfLoading]    = useState(false);
+  const [showDayModal,  setShowDayModal]  = useState(false);
+  const [pendingPdf,    setPendingPdf]    = useState(null);
+  const [pdfDay,        setPdfDay]        = useState("");
   const fileRef = useRef(null);
-  const dirty = useRef(null);
+  const dirty   = useRef(null);
+
+  const T = useMemo(() => mkTheme(isDark), [isDark]);
+
+  const toggleDark = () => setIsDark(d => {
+    localStorage.setItem("theme", d ? "light" : "dark");
+    return !d;
+  });
 
   const getM    = useCallback(m => DB[m]||initM(), [DB]);
   const hasData = useCallback(m => (DB[m]?.days?.length||0)>0, [DB]);
   const cur     = getM(mon);
 
   const setM = useCallback((m,fn) => {
-    setDB(prev=>{ const c=prev[m]||initM(); return {...prev,[m]:typeof fn==="function"?fn(c):fn}; });
+    setDB(prev=>{ const c=prev[m]||initM(); return {...prev,[m]:fn(c)}; });
     dirty.current=m;
   },[]);
 
-  // Reload when fiscal year changes
   useEffect(()=>{
-    setReady(false);
-    setDB({});
+    setReady(false); setDB({});
     dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(console.error).finally(()=>setReady(true));
   },[fiscalYear]);
 
@@ -196,20 +216,16 @@ export default function App() {
     setM(mon,c=>({...c,table:{...c.table,[org]:{...c.table[org],[day]:{...c.table[org]?.[day],[f]:v}}}}));
   },[mon,setM]);
 
-  // ── PDF Upload via Gemini ──
   const handlePdfPick = (file) => {
     if (!file) return;
     const ok = file.type === 'application/pdf' || file.type.startsWith('image/');
     if (!ok) { setMsg({ok:false,text:"รองรับเฉพาะ PDF และรูปภาพ"}); return; }
-    setPendingPdf(file);
-    setPdfDay("");
-    setShowDayModal(true);
+    setPendingPdf(file); setPdfDay(""); setShowDayModal(true);
   };
 
   const extractPdf = async (file, dayStr) => {
-    setShowDayModal(false);
-    setPdfLoading(true);
-    setMsg({ok:true,text:`⏳ Gemini กำลังอ่าน PDF วันที่ ${dayStr}...`});
+    setShowDayModal(false); setPdfLoading(true);
+    setMsg({ok:true,text:`⏳ Claude กำลังอ่าน PDF วันที่ ${dayStr}...`});
     try {
       const b64 = await new Promise((res,rej) => {
         const r = new FileReader();
@@ -217,17 +233,16 @@ export default function App() {
         r.onerror = rej;
         r.readAsDataURL(file);
       });
-
       const resp = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64: b64, mimeType: file.type })
       });
-      const parsed = await resp.json();
+      let parsed;
+      try { parsed = await resp.json(); } catch { throw new Error('API ไม่ตอบสนอง — ตรวจสอบว่า API server รันอยู่'); }
       if (!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
 
-      // check duplicate
       if (cur.history.find(h=>h.day===dayStr)) {
         if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${mon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { setPdfLoading(false); return; }
       }
@@ -246,46 +261,14 @@ export default function App() {
       });
 
       const matched = parsed.rows.filter(r=>findOrg(r.matched||r.name)).length;
-      setMsg({ok:true, text:`✅ Gemini อ่านสำเร็จ! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
+      setMsg({ok:true, text:`✅ Claude อ่านสำเร็จ! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
       setSubTab("monthtable");
     } catch(e) {
       setMsg({ok:false, text:`❌ ${e.message}`});
     } finally {
-      setPdfLoading(false);
-      setPendingPdf(null);
+      setPdfLoading(false); setPendingPdf(null);
     }
   };
-
-  const doImport = () => {
-    setJErr("");
-    const n=parseInt(jDay); if(!n||n<1||n>31){setJErr("ระบุวันที่ให้ถูกต้อง");return;}
-    const ds=String(n);
-    // ⚠️ แจ้งเตือนถ้ามีข้อมูลวันนั้นแล้ว
-    if(cur.history.find(h=>h.day===ds)) {
-      if(!window.confirm(`⚠️ วันที่ ${ds} เดือน${mon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่ข้อมูลเดิมมั้ย?`)) return;
-    }
-    let p; try{ p=JSON.parse(jText.replace(/```json|```/g,"").trim()); }catch{ setJErr("JSON ไม่ถูกต้อง");return; }
-    if(!Array.isArray(p?.rows)){setJErr("ไม่พบ rows ใน JSON");return;}
-    setM(mon,c=>{
-      const nd=c.days.includes(ds)?c.days:srtDays([...c.days,ds]);
-      const nt=addDayTbl({...c.table},ds);
-      p.rows.forEach(r=>{ const f=findOrg(r.matched||r.name); if(f&&(r.p97||r.p3)) nt[f][ds]={p97:r.p97?String(r.p97):"",p3:r.p3?String(r.p3):""}; });
-      const nh=[...c.history.filter(h=>h.day!==ds),{day:ds,total_p97:p.total_p97||0,total_p3:p.total_p3||0,total_amount:p.total_amount||0}].sort((a,b)=>parseInt(a.day)-parseInt(b.day));
-      return {...c,days:nd,table:nt,history:nh};
-    });
-    const m=p.rows.filter(r=>findOrg(r.matched||r.name)).length;
-    setMsg({ok:true,text:`✅ วันที่ ${ds} เดือน${mon}: จับคู่ได้ ${m}/${p.rows.length} รายการ`});
-    setJText(""); setJDay(""); setSubTab("monthtable");
-  };
-
-  const doCmp = useCallback(()=>{
-    const h=getM(mon).history; if(!h.length) return;
-    const last=h[h.length-1], tbl=getM(mon).table, d=last.day;
-    const tT97=sD(tbl,d,TESSABAN,"p97"),tT3=sD(tbl,d,TESSABAN,"p3");
-    const tO97=sD(tbl,d,OBT,"p97"),tO3=sD(tbl,d,OBT,"p3");
-    setCmp({day:d,pdf:last,calc:{p97:tT97+tO97,p3:tT3+tO3,total:tT97+tO97+tT3+tO3},t:{p97:tT97,p3:tT3},o:{p97:tO97,p3:tO3}});
-    setSubTab("compare");
-  },[mon,getM]);
 
   const mSum = useCallback(m=>{
     const {days,table}=getM(m);
@@ -293,71 +276,79 @@ export default function App() {
   },[getM]);
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s"}}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet"/>
-      {/* Print styles */}
-      <style>{`@media print { .no-print { display:none!important; } body { background:#fff; } }`}</style>
+      <style>{`
+        @media print {
+          .no-print { display:none!important; }
+          .print-only { display:block!important; }
+          body { background:#fff!important; margin:0; }
+          * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          @page { size: A4 landscape; margin: 10mm; }
+        }
+        .print-only { display:none; }
+      `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:`linear-gradient(135deg,${C.blue},#1a6bb5)`,color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 3px 12px rgba(0,0,0,0.2)",position:"sticky",top:0,zIndex:100,minHeight:54}}>
+      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#1a6bb5)`,color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:12,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
         <span style={{fontSize:22}}>🏛️</span>
         <div style={{flex:1}}>
           <div style={{fontWeight:800,fontSize:14}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
-          <div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → คัดลอก JSON → วางที่นี่</div>
+          <div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → Claude อ่านอัตโนมัติ</div>
         </div>
         {saving&&<div style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾 บันทึก...":saving==="saved"?"✅ บันทึกแล้ว":"❌ บันทึกไม่ได้"}</div>}
-        {/* Fiscal year selector */}
-        <select value={fiscalYear} onChange={e=>{ setFiscalYear(e.target.value); setDB({}); setMon("ตุลาคม"); setReady(false); }}
+        <select value={fiscalYear} onChange={e=>{ setFiscalYear(e.target.value); setMon("ตุลาคม"); }}
           style={{padding:"4px 8px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
           {[2566,2567,2568,2569,2570].map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
         </select>
-        <div style={{display:"flex",gap:5}}>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
           {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?C.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
+            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?T.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
           ))}
-          <button onClick={()=>exportBackup(DB)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup ข้อมูล">💾</button>
+          <button onClick={()=>exportBackup(DB)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup">💾</button>
+          <button onClick={toggleDark} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,background:"rgba(255,255,255,0.15)",color:"#fff"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀️":"🌙"}</button>
         </div>
       </header>
 
-      {!ready&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",gap:16}}><div style={{fontSize:42}}>⏳</div><div style={{fontSize:16,color:"#666",fontWeight:600}}>กำลังโหลดข้อมูล...</div></div>}
+      {!ready&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",gap:16}}><div style={{fontSize:42}}>⏳</div><div style={{fontSize:16,color:T.textMute,fontWeight:600}}>กำลังโหลดข้อมูล...</div></div>}
 
       {ready&&<>
-        {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?"#e6f9ee":"#fde8e8",color:msg.ok?"#1a6b38":"#c0392b",border:`1px solid ${msg.ok?"#9de0b6":"#f5b7b1"}`}}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5}}>×</button></div>}
+        {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?T.msgOkBg:T.msgErrBg,color:msg.ok?T.msgOkTxt:T.msgErrTxt,border:`1px solid ${msg.ok?T.msgOkBdr:T.msgErrBdr}`}}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5,color:msg.ok?T.msgOkTxt:T.msgErrTxt}}>×</button></div>}
 
-        {/* ── MONTHLY ── */}
+        {/* MONTHLY */}
         {mainTab==="monthly"&&<div style={{padding:"12px 16px"}}>
           <div className="no-print" style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
             {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");setCmp(null);}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?C.blue:hasData(m)?"#d1fae5":"#e2e8f0",color:mon===m?"#fff":hasData(m)?C.green:"#555"}}>
-                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:C.green,borderRadius:"50%",border:"1.5px solid #fff"}}/>}
+              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?T.blue:hasData(m)?isDark?"#0d2b1a":"#d1fae5":isDark?T.card2:"#e2e8f0",color:mon===m?"#fff":hasData(m)?T.green:T.textMed}}>
+                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:T.green,borderRadius:"50%",border:"1.5px solid #fff"}}/>}
               </button>
             ))}
           </div>
 
-          <div className="no-print" style={{display:"flex",background:"#fff",borderRadius:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.07)",width:"fit-content",marginBottom:14}}>
-            {[["import","📋 นำเข้า"],["monthtable","📅 ตารางเดือน"],["compare","🔍 ตรวจสอบ"]].map(([id,lbl])=>(
-              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 15px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:subTab===id?C.blue:"transparent",color:subTab===id?"#fff":"#555"}}>{lbl}</button>
+          <div className="no-print" style={{display:"flex",background:T.card,borderRadius:10,overflow:"hidden",boxShadow:`0 1px 4px ${T.shadow}`,width:"fit-content",marginBottom:14}}>
+            {[["import","📋 นำเข้า"],["monthtable","📅 ตารางเดือน"]].map(([id,lbl])=>(
+              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 15px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:subTab===id?T.blue:"transparent",color:subTab===id?"#fff":T.textMed}}>{lbl}</button>
             ))}
           </div>
 
           {/* IMPORT */}
           {subTab==="import"&&<div style={{maxWidth:640,margin:"0 auto"}}>
 
-            {/* Day modal for PDF upload */}
+            {/* Day modal */}
             {showDayModal&&(
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-                <div style={{background:"#fff",borderRadius:16,padding:"28px 28px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,0.25)"}}>
-                  <div style={{fontWeight:800,fontSize:20,color:C.blue,marginBottom:4}}>📅 วันที่ในเอกสาร</div>
-                  <div style={{fontSize:13,color:"#888",marginBottom:16}}>เดือน {mon} — วันที่เท่าไร?</div>
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:T.card,borderRadius:16,padding:"28px 28px",width:"100%",maxWidth:340,boxShadow:`0 8px 40px ${T.shadow2}`}}>
+                  <div style={{fontWeight:800,fontSize:20,color:T.blue,marginBottom:4}}>📅 วันที่ในเอกสาร</div>
+                  <div style={{fontSize:13,color:T.textMute,marginBottom:16}}>เดือน {mon} — วันที่เท่าไร?</div>
                   <input type="text" inputMode="numeric" placeholder="เช่น 1, 15, 30" value={pdfDay}
                     onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setPdfDay(v);}}
                     onKeyDown={e=>{if(e.key==="Enter"&&pdfDay)extractPdf(pendingPdf,String(parseInt(pdfDay)));}}
                     autoFocus
-                    style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?C.blue:"#d0d5dd"}`,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
+                    style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>setShowDayModal(false)} style={{flex:1,padding:10,border:"1px solid #ddd",borderRadius:10,background:"#f5f5f5",cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
+                    <button onClick={()=>setShowDayModal(false)} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
                     <button onClick={()=>{if(pdfDay)extractPdf(pendingPdf,String(parseInt(pdfDay)));}} disabled={!pdfDay}
-                      style={{flex:2,padding:10,background:pdfDay?C.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>
+                      style={{flex:2,padding:10,background:pdfDay?T.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>
                       🔍 อ่านข้อมูล
                     </button>
                   </div>
@@ -365,133 +356,110 @@ export default function App() {
               </div>
             )}
 
-            {/* PDF Upload Zone */}
+            {/* PDF Drop Zone */}
             <div
               onDrop={e=>{e.preventDefault();handlePdfPick(e.dataTransfer.files[0]);}}
               onDragOver={e=>e.preventDefault()}
               onClick={()=>!pdfLoading&&fileRef.current?.click()}
-              style={{border:`2.5px dashed ${pdfLoading?"#aaa":C.blue}`,borderRadius:14,padding:"36px 24px",textAlign:"center",background:"#fff",cursor:pdfLoading?"default":"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",marginBottom:14}}>
+              style={{border:`2.5px dashed ${pdfLoading?T.textFaint:T.blue}`,borderRadius:14,padding:"36px 24px",textAlign:"center",background:T.card,cursor:pdfLoading?"default":"pointer",boxShadow:`0 2px 8px ${T.shadow}`,marginBottom:14}}>
               <div style={{fontSize:46,marginBottom:10}}>{pdfLoading?"⏳":"📄"}</div>
-              <div style={{fontSize:17,fontWeight:800,color:pdfLoading?"#aaa":C.blue,marginBottom:6}}>
-                {pdfLoading?"Gemini กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
+              <div style={{fontSize:17,fontWeight:800,color:pdfLoading?T.textFaint:T.blue,marginBottom:6}}>
+                {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
               </div>
-              <div style={{fontSize:13,color:"#999"}}>รองรับ PDF · PNG · JPG · Gemini อ่านและจัดข้อมูลอัตโนมัติ (ฟรี)</div>
-              <input ref={fileRef} type="file" accept=".pdf,image/*" style={{display:"none"}}
-                onChange={e=>handlePdfPick(e.target.files[0])}/>
+              <div style={{fontSize:13,color:T.textMute}}>รองรับ PDF · PNG · JPG · Claude อ่านและจัดข้อมูลอัตโนมัติ</div>
+              <input ref={fileRef} type="file" accept=".pdf,image/*" style={{display:"none"}} onChange={e=>handlePdfPick(e.target.files[0])}/>
             </div>
 
-            {/* Divider */}
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-              <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
-              <span style={{fontSize:12,color:"#aaa",fontWeight:600}}>หรือวาง JSON เอง</span>
-              <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
-            </div>
-            <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-              <div style={{fontWeight:800,fontSize:15,color:C.blue,marginBottom:14}}>📥 วาง JSON — เดือน{mon}</div>
-              <div style={{marginBottom:12}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#555",marginBottom:5}}>วันที่ในเอกสาร</div>
-                <input type="text" inputMode="numeric" placeholder="เช่น 1, 15, 30" value={jDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setJDay(v);}} style={{width:130,padding:"9px 12px",borderRadius:8,border:`2px solid ${jDay?C.blue:"#d0d5dd"}`,fontFamily:"inherit",fontSize:18,textAlign:"center",boxSizing:"border-box",outline:"none"}}/>
-                {jDay&&cur.history.find(h=>h.day===String(parseInt(jDay)))&&<div style={{marginTop:5,fontSize:12,color:C.gold,fontWeight:600}}>⚠️ มีข้อมูลวันนี้อยู่แล้ว — จะถูกแทนที่เมื่อนำเข้า</div>}
-              </div>
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:13,fontWeight:600,color:"#555",marginBottom:5}}>JSON จาก Claude</div>
-                <textarea value={jText} onChange={e=>{setJText(e.target.value);setJErr("");}} placeholder="วาง JSON ที่ได้จาก Claude..." style={{width:"100%",minHeight:160,padding:"10px 12px",borderRadius:8,border:`2px solid ${jErr?"#f5b7b1":jText?"#90caf9":"#d0d5dd"}`,fontFamily:"monospace",fontSize:12,boxSizing:"border-box",resize:"vertical",outline:"none"}}/>
-                {jErr&&<div style={{color:C.red,fontSize:13,marginTop:4}}>⚠️ {jErr}</div>}
-              </div>
-              <button onClick={doImport} disabled={!jText||!jDay} style={{width:"100%",padding:13,background:jText&&jDay?C.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:jText&&jDay?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>📥 นำเข้าวันที่ {jDay||"..."} เดือน{mon}</button>
-            </div>
-            <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginTop:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-              <div style={{fontWeight:700,color:C.blue,marginBottom:8,fontSize:13}}>⚙️ เพิ่มวันเปล่าด้วยตนเอง</div>
+            {/* Manual day add */}
+            <div style={{background:T.card,borderRadius:12,padding:"14px 16px",marginTop:14,boxShadow:`0 1px 6px ${T.shadow}`}}>
+              <div style={{fontWeight:700,color:T.blue,marginBottom:8,fontSize:13}}>⚙️ เพิ่มวันเปล่าด้วยตนเอง</div>
               <div style={{display:"flex",gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="วันที่ เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:110,padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}/>
-                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"7px 14px",background:C.blue,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700}}>+ เพิ่ม</button>
+                <input type="text" inputMode="numeric" placeholder="วันที่ เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:110,padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:14}}/>
+                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"7px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700}}>+ เพิ่ม</button>
               </div>
-              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:"#e8f0fe",color:C.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:C.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
+              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#162035":"#e8f0fe",color:T.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
             </div>
           </div>}
 
           {/* MONTH TABLE */}
           {subTab==="monthtable"&&<div>
             <div className="no-print" style={{display:"flex",gap:10,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontWeight:800,fontSize:16,color:C.blue}}>ตารางรวมเดือน {mon}</span>
-              <span style={{fontSize:13,color:"#888"}}>| {cur.days.length} วัน</span>
+              <span style={{fontWeight:800,fontSize:16,color:T.blue}}>ตารางรวมเดือน {mon}</span>
+              <span style={{fontSize:13,color:T.textMute}}>| {cur.days.length} วัน</span>
               <div style={{marginLeft:"auto",display:"flex",gap:8}}>
                 {cur.days.length>0&&<>
-                  <button onClick={()=>exportExcel(mon,cur.days,cur.table)} style={{padding:"6px 14px",background:C.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>📊 Export Excel</button>
-                  <button onClick={()=>window.print()} style={{padding:"6px 14px",background:"#555",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>🖨️ พิมพ์</button>
+                  <button onClick={()=>exportExcel(mon,cur.days,cur.table)} style={{padding:"6px 14px",background:T.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>📊 Export Excel</button>
+                  <button onClick={()=>window.print()} style={{padding:"6px 14px",background:T.textMed,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>🖨️ พิมพ์</button>
                 </>}
-                {cur.history.length>0&&<button onClick={doCmp} style={{padding:"6px 14px",background:C.blue,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>🔍 เทียบ PDF</button>}
               </div>
             </div>
 
             {cur.days.length===0
-              ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📅</div><div>ยังไม่มีข้อมูล — ไปที่แท็บ "📋 นำเข้า"</div></div>
+              ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📅</div><div>ยังไม่มีข้อมูล — ไปที่แท็บ "📋 นำเข้า"</div></div>
               :<>
-                {cur.history.length>0&&<div className="no-print" style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:12,fontWeight:700,color:"#555",marginBottom:8}}>📄 นำเข้าแล้ว — กด 🗑️ เพื่อลบวันนั้น</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cur.history.map(h=><div key={h.day} style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}><div><span style={{fontWeight:700,color:C.green}}>วันที่ {h.day}</span><span style={{color:"#888",marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div><button onClick={()=>{ if(window.confirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`)) dropDay(h.day); }} style={{border:"none",background:"#fde8e8",color:C.red,cursor:"pointer",borderRadius:6,padding:"3px 7px",fontSize:13,fontWeight:700}}>🗑️</button></div>)}</div></div>}
+                {cur.history.length>0&&<div className="no-print" style={{background:T.card,borderRadius:10,padding:"12px 16px",marginBottom:14,boxShadow:`0 1px 4px ${T.shadow}`}}><div style={{fontSize:12,fontWeight:700,color:T.textMed,marginBottom:8}}>📄 นำเข้าแล้ว — กด 🗑️ เพื่อลบวันนั้น</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cur.history.map(h=><div key={h.day} style={{background:T.histBg,border:`1px solid ${T.histBdr}`,borderRadius:8,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}><div><span style={{fontWeight:700,color:T.green}}>วันที่ {h.day}</span><span style={{color:T.textMute,marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div><button onClick={()=>{ if(window.confirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`)) dropDay(h.day); }} style={{border:"none",background:T.msgErrBg,color:T.red,cursor:"pointer",borderRadius:6,padding:"3px 7px",fontSize:13,fontWeight:700}}>🗑️</button></div>)}</div></div>}
 
-                {/* Print title */}
-                <div className="print-only" style={{textAlign:"center",marginBottom:16,display:"none"}}>
-                  <div style={{fontSize:18,fontWeight:800}}>รายงานยอดรายวัน เทศบาล / อบต.</div>
-                  <div style={{fontSize:14}}>เดือน{mon} | {cur.days.length} วัน</div>
+                <div className="print-only" style={{marginBottom:20,borderBottom:"2px solid #0f4c81",paddingBottom:12}}>
+                  <div style={{textAlign:"center",fontSize:16,fontWeight:800,color:"#0f4c81",marginBottom:4}}>รายงานยอดเงินอุดหนุนรายวัน</div>
+                  <div style={{textAlign:"center",fontSize:13,fontWeight:700,marginBottom:2}}>เทศบาล / องค์การบริหารส่วนตำบล</div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,color:"#333"}}>
+                    <span>ปีงบประมาณ พ.ศ. {fiscalYear}</span>
+                    <span style={{fontWeight:700,fontSize:14}}>เดือน{mon} ({cur.days.length} วัน)</span>
+                    <span>พิมพ์วันที่ {new Date().toLocaleDateString("th-TH",{year:"numeric",month:"long",day:"numeric"})}</span>
+                  </div>
                 </div>
 
-                <MTable title="เทศบาล" list={TESSABAN} days={cur.days} table={cur.table} setCell={setCell} C={C} sR={sR} sD={sD} sG={sG} n2={n2}/>
+                <MTable title="เทศบาล" list={TESSABAN} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
                 <div style={{height:16}}/>
-                <MTable title="อบต." list={OBT} days={cur.days} table={cur.table} setCell={setCell} C={C} sR={sR} sD={sD} sG={sG} n2={n2}/>
+                <MTable title="อบต." list={OBT} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-                  <SCard label="รวมเทศบาล" p97={sG(cur.table,TESSABAN,cur.days,"p97")} p3={sG(cur.table,TESSABAN,cur.days,"p3")} color={C.blue}/>
-                  <SCard label="รวม อบต." p97={sG(cur.table,OBT,cur.days,"p97")} p3={sG(cur.table,OBT,cur.days,"p3")} color={C.green}/>
+                  <SCard label="รวมเทศบาล" p97={sG(cur.table,TESSABAN,cur.days,"p97")} p3={sG(cur.table,TESSABAN,cur.days,"p3")} color={T.blue}/>
+                  <SCard label="รวม อบต." p97={sG(cur.table,OBT,cur.days,"p97")} p3={sG(cur.table,OBT,cur.days,"p3")} color={T.green}/>
                   <div style={{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"12px 14px"}}>
                     <div style={{fontSize:11,opacity:.7,marginBottom:3}}>ยอดรวมเดือน{mon}</div>
-                    <div style={{fontSize:20,fontWeight:900,color:C.gold}}>{(sG(cur.table,ALL,cur.days,"p97")+sG(cur.table,ALL,cur.days,"p3")).toFixed(2)}</div>
+                    <div style={{fontSize:20,fontWeight:900,color:T.gold}}>{(sG(cur.table,ALL,cur.days,"p97")+sG(cur.table,ALL,cur.days,"p3")).toFixed(2)}</div>
                     <div style={{fontSize:10,opacity:.6,marginTop:2}}>97%: {sG(cur.table,ALL,cur.days,"p97").toFixed(2)} | 3%: {sG(cur.table,ALL,cur.days,"p3").toFixed(2)}</div>
                   </div>
                 </div>
               </>}
           </div>}
 
-          {/* COMPARE */}
-          {subTab==="compare"&&<div style={{maxWidth:660,margin:"0 auto"}}>
-            {!cmp
-              ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔍</div><div>นำเข้าข้อมูลก่อน แล้วกด "เทียบ PDF"</div></div>
-              :<CmpView cmp={cmp} mon={mon} C={C}/>}
-          </div>}
         </div>}
 
-        {/* ── SUMMARY ── */}
-        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} C={C} fmt={fmt} sR={sR}/>}
+        {/* SUMMARY */}
+        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} T={T} fmt={fmt} sR={sR}/>}
 
-        {/* ── CHART ── */}
-        {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} hasData={hasData} getM={getM} C={C} fmt={fmt} sR={sR} sG={sG}/>}
+        {/* CHART */}
+        {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} getM={getM} T={T} fmt={fmt} sR={sR} sG={sG}/>}
       </>}
     </div>
   );
 }
 
-// ── Month Table ──
-function MTable({title,list,days,table,setCell,C,sR,sD,sG,n2}){
-  const col=title==="เทศบาล"?C.blue:C.green;
+function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}){
+  const col=title==="เทศบาล"?T.blue:T.green;
   const NW=160,CW=48;
+  const hdr97=sG(table,list,days,"p97"), hdr3=sG(table,list,days,"p3");
   return(
-    <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
+    <div style={{background:T.card,borderRadius:12,overflow:"hidden",boxShadow:`0 2px 8px ${T.shadow}`}}>
       <div style={{background:col,color:"#fff",padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontWeight:800,fontSize:14}}>{title}</span>
         <span style={{fontSize:11,opacity:.75,background:"rgba(255,255,255,0.2)",padding:"1px 8px",borderRadius:20}}>97% / 3%</span>
-        <span style={{marginLeft:"auto",fontSize:11,opacity:.85}}>Σ97%: {sG(table,list,days,"p97").toFixed(2)} | Σ3%: {sG(table,list,days,"p3").toFixed(2)} | รวม: {(sG(table,list,days,"p97")+sG(table,list,days,"p3")).toFixed(2)}</span>
+        <span style={{marginLeft:"auto",fontSize:11,opacity:.85}}>Σ97%: {hdr97.toFixed(2)} | Σ3%: {hdr3.toFixed(2)} | รวม: {(hdr97+hdr3).toFixed(2)}</span>
       </div>
       <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",fontSize:11.5,tableLayout:"fixed",minWidth:NW+days.length*CW*2+190}}>
           <thead>
-            <tr style={{background:"#f1f5f9"}}>
-              <th style={{width:NW,padding:"6px 8px",textAlign:"left",fontWeight:700,fontSize:12,color:"#4a5568",borderBottom:"1px solid #e2e8f0",borderRight:"2px solid #aac4e0"}}>หน่วยงาน</th>
-              {days.map(d=><th key={d} colSpan={2} style={{width:CW*2,padding:"6px 4px",textAlign:"center",fontWeight:700,fontSize:12,color:col,borderBottom:"1px solid #e2e8f0",borderRight:"2px solid #aac4e0"}}>วันที่ {d}</th>)}
-              <th colSpan={3} style={{width:190,padding:"6px 4px",textAlign:"center",fontWeight:700,fontSize:12,color:col,background:"#dbeafe",borderBottom:"1px solid #e2e8f0"}}>รวมทั้งเดือน</th>
+            <tr style={{background:T.card3}}>
+              <th style={{width:NW,padding:"6px 8px",textAlign:"left",fontWeight:700,fontSize:12,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`}}>หน่วยงาน</th>
+              {days.map(d=><th key={d} colSpan={2} style={{width:CW*2,padding:"6px 4px",textAlign:"center",fontWeight:700,fontSize:12,color:col,borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`}}>วันที่ {d}</th>)}
+              <th colSpan={3} style={{width:190,padding:"6px 4px",textAlign:"center",fontWeight:700,fontSize:12,color:col,background:T.p97Bg,borderBottom:`1px solid ${T.border}`}}>รวมทั้งเดือน</th>
             </tr>
-            <tr style={{borderBottom:"2px solid #cbd5e0"}}>
-              <th style={{width:NW,padding:"4px 8px",background:"#edf2f7",borderRight:"2px solid #aac4e0"}}/>
+            <tr style={{borderBottom:`2px solid ${T.borderHeavy}`}}>
+              <th style={{width:NW,padding:"4px 8px",background:T.card3,borderRight:`2px solid ${T.borderHeavy}`}}/>
               {days.map(d=><React.Fragment key={d}>
                 <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:col}}>97%</th>
-                <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888",borderRight:"2px solid #aac4e0"}}>3%</th>
+                <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888",borderRight:`2px solid ${T.borderHeavy}`}}>3%</th>
               </React.Fragment>)}
               <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:col}}>97%</th>
               <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888"}}>3%</th>
@@ -501,46 +469,43 @@ function MTable({title,list,days,table,setCell,C,sR,sD,sG,n2}){
           <tbody>
             {list.map((org,i)=>{
               const r97=sR(table,org,days,"p97"),r3=sR(table,org,days,"p3");
-              return(<tr key={org} style={{background:i%2===0?"#fff":"#fafbfc"}}>
-                <td style={{padding:"3px 8px",borderBottom:"1px solid #e8ecf0",borderRight:"2px solid #aac4e0",fontWeight:500,color:"#1a2744",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:12}}>{org}</td>
+              return(<tr key={org} style={{background:i%2===0?T.card:T.rowAlt}}>
+                <td style={{padding:"3px 8px",borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,fontWeight:500,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:12}}>{org}</td>
                 {days.map(d=><React.Fragment key={d}>
-                  <td style={{padding:2,borderBottom:"1px solid #e8ecf0",background:"#f0f6ff"}}>
+                  <td style={{padding:2,borderBottom:`1px solid ${T.border}`,background:T.p97Bg}}>
                     <input type="text" inputMode="decimal" value={table[org]?.[d]?.p97??""} onChange={e=>setCell(org,d,"p97",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:col,fontWeight:600,boxSizing:"border-box"}}/>
                   </td>
-                  <td style={{padding:2,borderBottom:"1px solid #e8ecf0",borderRight:"2px solid #aac4e0",background:"#f9f9f9"}}>
-                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>setCell(org,d,"p3",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:"#888",boxSizing:"border-box"}}/>
+                  <td style={{padding:2,borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,background:T.p3Bg}}>
+                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>setCell(org,d,"p3",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.textMute,boxSizing:"border-box"}}/>
                   </td>
                 </React.Fragment>)}
-                <td style={{padding:"3px 6px",borderBottom:"1px solid #e8ecf0",textAlign:"right",fontWeight:700,color:col,background:"#eff6ff"}}>{n2(r97)}</td>
-                <td style={{padding:"3px 6px",borderBottom:"1px solid #e8ecf0",textAlign:"right",fontWeight:600,color:"#666",background:"#f3f3f3"}}>{n2(r3)}</td>
-                <td style={{padding:"3px 6px",borderBottom:"1px solid #e8ecf0",textAlign:"right",fontWeight:800,color:"#1a1a2e",background:"#dbeafe",fontSize:12}}>{n2(r97+r3)}</td>
+                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:700,color:col,background:T.p97Sum}}>{n2(r97)}</td>
+                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:600,color:T.textMute,background:T.p3Sum}}>{n2(r3)}</td>
+                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:800,color:T.text,background:"#dbeafe",fontSize:12}}>{n2(r97+r3)}</td>
               </tr>);
             })}
-            {/* แถวรวม 97% */}
-            <tr style={{borderTop:"2px solid #94a3b8",background:"#e8f0fe"}}>
-              <td style={{padding:"5px 8px",fontWeight:800,color:col,borderRight:"2px solid #aac4e0",fontSize:12}}>รวม 97%</td>
+            <tr style={{borderTop:`2px solid ${T.borderHeavy}`,background:T.p97Sum}}>
+              <td style={{padding:"5px 8px",fontWeight:800,color:col,borderRight:`2px solid ${T.borderHeavy}`,fontSize:12}}>รวม 97%</td>
               {days.map(d=><React.Fragment key={d}>
-                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:col,background:"#dbeafe",fontSize:12,borderRight:"none"}}>{n2(sD(table,d,list,"p97"))}</td>
-                <td style={{padding:"5px 4px",background:"#edf2f7",borderRight:"2px solid #aac4e0"}}></td>
+                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:col,background:"#dbeafe",fontSize:12}}>{n2(sD(table,d,list,"p97"))}</td>
+                <td style={{padding:"5px 4px",background:T.card3,borderRight:`2px solid ${T.borderHeavy}`}}></td>
               </React.Fragment>)}
-              <td style={{padding:"5px 6px",textAlign:"right",background:col,color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(sG(table,list,days,"p97"))}</td>
+              <td style={{padding:"5px 6px",textAlign:"right",background:col,color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(hdr97)}</td>
             </tr>
-            {/* แถวรวม 3% */}
-            <tr style={{background:"#f3f3f3"}}>
-              <td style={{padding:"5px 8px",fontWeight:800,color:"#555",borderRight:"2px solid #aac4e0",fontSize:12}}>รวม 3%</td>
+            <tr style={{background:T.p3Sum}}>
+              <td style={{padding:"5px 8px",fontWeight:800,color:T.textMed,borderRight:`2px solid ${T.borderHeavy}`,fontSize:12}}>รวม 3%</td>
               {days.map(d=><React.Fragment key={d}>
-                <td style={{padding:"5px 4px",background:"#edf2f7",borderRight:"none"}}></td>
-                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:"#555",background:"#e5e5e5",fontSize:12,borderRight:"2px solid #aac4e0"}}>{n2(sD(table,d,list,"p3"))}</td>
+                <td style={{padding:"5px 4px",background:T.card3}}></td>
+                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:T.textMed,background:T.card2,fontSize:12,borderRight:`2px solid ${T.borderHeavy}`}}>{n2(sD(table,d,list,"p3"))}</td>
               </React.Fragment>)}
-              <td style={{padding:"5px 6px",textAlign:"right",background:"#555",color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(sG(table,list,days,"p3"))}</td>
+              <td style={{padding:"5px 6px",textAlign:"right",background:"#555",color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(hdr3)}</td>
             </tr>
-            {/* แถวรวมทั้งหมด */}
-            <tr style={{background:"#1a1a2e"}}>
-              <td style={{padding:"6px 8px",fontWeight:900,color:"#ffd84d",borderRight:"2px solid #333",fontSize:12}}>รวมทั้งหมด</td>
+            <tr style={{background:T.totRow}}>
+              <td style={{padding:"6px 8px",fontWeight:900,color:"#ffd84d",borderRight:`2px solid #333`,fontSize:12}}>รวมทั้งหมด</td>
               {days.map(d=><React.Fragment key={d}>
-                <td colSpan={2} style={{padding:"6px 4px",textAlign:"right",fontWeight:900,color:"#ffd84d",background:"#1a1a2e",fontSize:13,borderRight:"2px solid #333"}}>{n2(sD(table,d,list,"p97")+sD(table,d,list,"p3"))}</td>
+                <td colSpan={2} style={{padding:"6px 4px",textAlign:"right",fontWeight:900,color:"#ffd84d",background:T.totRow,fontSize:13,borderRight:"2px solid #333"}}>{n2(sD(table,d,list,"p97")+sD(table,d,list,"p3"))}</td>
               </React.Fragment>)}
-              <td style={{padding:"6px 6px",textAlign:"right",background:"#0f4c81",color:"#ffd84d",fontWeight:900,fontSize:14}} colSpan={3}>{n2(sG(table,list,days,"p97")+sG(table,list,days,"p3"))}</td>
+              <td style={{padding:"6px 6px",textAlign:"right",background:"#0f4c81",color:"#ffd84d",fontWeight:900,fontSize:14}} colSpan={3}>{n2(hdr97+hdr3)}</td>
             </tr>
           </tbody>
         </table>
@@ -549,105 +514,113 @@ function MTable({title,list,days,table,setCell,C,sR,sD,sG,n2}){
   );
 }
 
-// ── Chart View (no external library) ──
-function ChartView({MONTHS,mSum,hasData,getM,C,fmt,sR,sG}){
+function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG}){
   const [cmpM1,setCmpM1]=useState("ตุลาคม");
   const [cmpM2,setCmpM2]=useState("พฤศจิกายน");
-  const [view,setView]=useState("bar"); // bar | compare
+  const [view,setView]=useState("bar");
 
   const data = MONTHS.map(m=>{
     const s=mSum(m);
-    return {m, t:s.t97+s.t3, o:s.o97+s.o3, total:s.t97+s.t3+s.o97+s.o3};
+    const p97=s.t97+s.o97, p3=s.t3+s.o3;
+    return {m, p97, p3, total:p97+p3};
   }).filter(d=>d.total>0);
 
   const maxVal = Math.max(...data.map(d=>d.total), 1);
 
-  const cmpData = () => {
+  const cmpData = useMemo(() => {
     const m1=getM(cmpM1), m2=getM(cmpM2);
-    return [...TESSABAN,...OBT].map(org=>({
+    return ALL.map(org=>({
       name: org.replace("เทศบาลตำบล","ทบ.").replace("เทศบาลเมือง","ทบ.ม."),
       v1: +(sR(m1.table,org,m1.days,"p97")+sR(m1.table,org,m1.days,"p3")).toFixed(2),
       v2: +(sR(m2.table,org,m2.days,"p97")+sR(m2.table,org,m2.days,"p3")).toFixed(2),
     })).filter(r=>r.v1>0||r.v2>0);
-  };
+  }, [cmpM1,cmpM2,getM,sR]);
+
+  const cmpMax = useMemo(() => Math.max(...cmpData.map(x=>Math.max(x.v1,x.v2)),1), [cmpData]);
 
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{fontWeight:800,fontSize:17,color:C.blue,marginBottom:14}}>📈 กราฟแสดงยอด</div>
+      <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📈 กราฟแสดงยอด</div>
       <div style={{display:"flex",gap:8,marginBottom:18}}>
-        <button onClick={()=>setView("bar")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="bar"?C.blue:"#e2e8f0",color:view==="bar"?"#fff":"#555"}}>📊 ยอดรายเดือน</button>
-        <button onClick={()=>setView("compare")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="compare"?C.blue:"#e2e8f0",color:view==="compare"?"#fff":"#555"}}>🔄 เปรียบเทียบเดือน</button>
+        <button onClick={()=>setView("bar")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="bar"?T.blue:T.card2,color:view==="bar"?"#fff":T.textMed}}>📊 ยอดรายเดือน</button>
+        <button onClick={()=>setView("compare")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="compare"?T.blue:T.card2,color:view==="compare"?"#fff":T.textMed}}>🔄 เปรียบเทียบเดือน</button>
       </div>
 
       {view==="bar"&&(
         data.length===0
-          ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📊</div><div>ยังไม่มีข้อมูล</div></div>
-          :<div style={{background:"#fff",borderRadius:12,padding:"20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
-            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:20}}>ยอดรวมแต่ละเดือน</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {data.map(({m,t,o,total})=>(
+          ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📊</div><div>ยังไม่มีข้อมูล</div></div>
+          :<div style={{background:T.card,borderRadius:12,padding:"20px 16px",boxShadow:`0 2px 8px ${T.shadow}`}}>
+            <div style={{fontWeight:700,fontSize:14,color:T.blue,marginBottom:20}}>ยอดรวมแต่ละเดือน (แยก 97% / 3%)</div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {data.map(({m,p97,p3,total})=>(
                 <div key={m}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                    <span style={{fontWeight:600,color:"#333"}}>{m}</span>
-                    <span style={{color:"#888"}}>{fmt(total)}</span>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
+                    <span style={{fontWeight:700,color:T.text}}>{m}</span>
+                    <span style={{color:T.textMute,fontSize:11}}>รวม {fmt(total)}</span>
                   </div>
-                  <div style={{display:"flex",height:22,borderRadius:6,overflow:"hidden",background:"#f1f5f9"}}>
-                    <div style={{width:`${(t/maxVal)*100}%`,background:C.blue,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
-                      {t>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(t)}</span>}
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{width:28,fontSize:10,color:T.blue,fontWeight:700,textAlign:"right",flexShrink:0}}>97%</span>
+                      <div style={{flex:1,height:18,borderRadius:5,overflow:"hidden",background:T.card3,position:"relative"}}>
+                        <div style={{width:`${(p97/maxVal)*100}%`,height:"100%",background:T.blue,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
+                          {p97>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(p97)}</span>}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{width:`${(o/maxVal)*100}%`,background:C.green,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
-                      {o>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(o)}</span>}
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{width:28,fontSize:10,color:T.gold,fontWeight:700,textAlign:"right",flexShrink:0}}>3%</span>
+                      <div style={{flex:1,height:18,borderRadius:5,overflow:"hidden",background:T.card3,position:"relative"}}>
+                        <div style={{width:`${(p3/maxVal)*100}%`,height:"100%",background:T.gold,transition:"width .4s",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
+                          {p3>0&&<span style={{fontSize:10,color:"#fff",fontWeight:700,whiteSpace:"nowrap"}}>{fmt(p3)}</span>}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
             <div style={{display:"flex",gap:16,marginTop:16,fontSize:12}}>
-              <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,background:C.blue,borderRadius:2,display:"inline-block"}}/>เทศบาล</span>
-              <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:12,background:C.green,borderRadius:2,display:"inline-block"}}/>อบต.</span>
+              <span style={{display:"flex",alignItems:"center",gap:5,color:T.textMed}}><span style={{width:12,height:12,background:T.blue,borderRadius:2,display:"inline-block"}}/>97%</span>
+              <span style={{display:"flex",alignItems:"center",gap:5,color:T.textMed}}><span style={{width:12,height:12,background:T.gold,borderRadius:2,display:"inline-block"}}/>3%</span>
             </div>
           </div>
       )}
 
       {view==="compare"&&(
         <div>
-          <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",marginBottom:16,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-            <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:12}}>เลือกเดือนที่จะเปรียบเทียบ</div>
+          <div style={{background:T.card,borderRadius:12,padding:"16px 18px",marginBottom:16,boxShadow:`0 1px 6px ${T.shadow}`}}>
+            <div style={{fontWeight:700,fontSize:14,color:T.blue,marginBottom:12}}>เลือกเดือนที่จะเปรียบเทียบ</div>
             <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-              <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 1</div>
-                <select value={cmpM1} onChange={e=>setCmpM1(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
+              <div><div style={{fontSize:12,color:T.textMed,marginBottom:4}}>เดือนที่ 1</div>
+                <select value={cmpM1} onChange={e=>setCmpM1(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:14}}>
                   {MONTHS.map(m=><option key={m}>{m}</option>)}
                 </select></div>
-              <div><div style={{fontSize:12,color:"#555",marginBottom:4}}>เดือนที่ 2</div>
-                <select value={cmpM2} onChange={e=>setCmpM2(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:"1px solid #d0d5dd",fontFamily:"inherit",fontSize:14}}>
+              <div><div style={{fontSize:12,color:T.textMed,marginBottom:4}}>เดือนที่ 2</div>
+                <select value={cmpM2} onChange={e=>setCmpM2(e.target.value)} style={{padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:14}}>
                   {MONTHS.map(m=><option key={m}>{m}</option>)}
                 </select></div>
             </div>
           </div>
-          {cmpData().length===0
-            ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔄</div><div>ยังไม่มีข้อมูลในเดือนที่เลือก</div></div>
-            :<div style={{background:"#fff",borderRadius:12,padding:"16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
-              <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:14}}>เปรียบเทียบ {cmpM1} vs {cmpM2}</div>
-              {cmpData().map(r=>{
-                const mx=Math.max(...cmpData().map(x=>Math.max(x.v1,x.v2)),1);
-                return(
+          {cmpData.length===0
+            ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔄</div><div>ยังไม่มีข้อมูลในเดือนที่เลือก</div></div>
+            :<div style={{background:T.card,borderRadius:12,padding:"16px",boxShadow:`0 2px 8px ${T.shadow}`}}>
+              <div style={{fontWeight:700,fontSize:14,color:T.blue,marginBottom:14}}>เปรียบเทียบ {cmpM1} vs {cmpM2}</div>
+              {cmpData.map(r=>(
                 <div key={r.name} style={{marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#555",marginBottom:3}}>{r.name}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textMed,marginBottom:3}}>{r.name}</div>
                   <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                    <div style={{width:50,fontSize:10,color:C.blue,textAlign:"right"}}>{r.v1>0?fmt(r.v1):"-"}</div>
+                    <div style={{width:50,fontSize:10,color:T.blue,textAlign:"right"}}>{r.v1>0?fmt(r.v1):"-"}</div>
                     <div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}>
-                      <div style={{height:10,background:C.blue,borderRadius:3,width:`${(r.v1/mx)*100}%`}}/>
-                      <div style={{height:10,background:C.gold,borderRadius:3,width:`${(r.v2/mx)*100}%`}}/>
+                      <div style={{height:10,background:T.blue,borderRadius:3,width:`${(r.v1/cmpMax)*100}%`}}/>
+                      <div style={{height:10,background:T.gold,borderRadius:3,width:`${(r.v2/cmpMax)*100}%`}}/>
                     </div>
-                    <div style={{width:50,fontSize:10,color:"#e8a020"}}>{r.v2>0?fmt(r.v2):"-"}</div>
+                    <div style={{width:50,fontSize:10,color:T.gold}}>{r.v2>0?fmt(r.v2):"-"}</div>
                   </div>
                 </div>
-                );
-              })}
-            
+              ))}
               <div style={{display:"flex",gap:16,marginTop:12,fontSize:12}}>
-                <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:8,background:C.blue,borderRadius:2,display:"inline-block"}}/>{cmpM1}</span>
-                <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:8,background:C.gold,borderRadius:2,display:"inline-block"}}/>{cmpM2}</span>
+                <span style={{display:"flex",alignItems:"center",gap:5,color:T.textMed}}><span style={{width:12,height:8,background:T.blue,borderRadius:2,display:"inline-block"}}/>{cmpM1}</span>
+                <span style={{display:"flex",alignItems:"center",gap:5,color:T.textMed}}><span style={{width:12,height:8,background:T.gold,borderRadius:2,display:"inline-block"}}/>{cmpM2}</span>
               </div>
             </div>}
         </div>
@@ -656,70 +629,39 @@ function ChartView({MONTHS,mSum,hasData,getM,C,fmt,sR,sG}){
   );
 }
 
-// ── Compare View ──
-function CmpView({cmp,mon,C}){
-  return(
-    <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,0.08)"}}>
-      <div style={{background:C.blue,color:"#fff",padding:"14px 18px"}}><div style={{fontWeight:800,fontSize:17}}>ผลเปรียบเทียบ — วันที่ {cmp.day} เดือน{mon}</div></div>
-      <div style={{padding:16}}>
-        <div style={{background:"#f8f9fa",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#555",display:"flex",gap:14,flexWrap:"wrap"}}>
-          <span>📄 <b>PDF:</b></span><span>97% = <b>{(cmp.pdf.total_p97||0).toFixed(2)}</b></span><span>3% = <b>{(cmp.pdf.total_p3||0).toFixed(2)}</b></span><span>รวม = <b>{(cmp.pdf.total_amount||0).toFixed(2)}</b></span>
-        </div>
-        {[["97% รวม",cmp.calc.p97,cmp.pdf.total_p97||0],["3% รวม",cmp.calc.p3,cmp.pdf.total_p3||0],["รวมเงิน",cmp.calc.total,cmp.pdf.total_amount||0]].map(([lbl,calc,pdf])=>{
-          const ok=Math.abs(calc-pdf)<0.06;
-          return(<div key={lbl} style={{marginBottom:10,padding:"12px 14px",borderRadius:9,background:ok?"#f0fdf4":"#fef2f2",border:`1.5px solid ${ok?"#86efac":"#fca5a5"}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontWeight:700}}>{lbl}</span><span style={{fontSize:20}}>{ok?"✅":"❌"}</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              {[["คำนวณได้",calc,C.blue],["ใน PDF",pdf,"#276749"],["ผลต่าง",calc-pdf,ok?"#888":C.red]].map(([l,v,co])=>(
-                <div key={l} style={{background:"rgba(0,0,0,0.04)",borderRadius:6,padding:"8px 10px"}}><div style={{fontSize:11,color:"#888",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:co}}>{(+v).toFixed(2)}</div></div>
-              ))}
-            </div>
-          </div>);
-        })}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
-          {[{l:"เทศบาล",d:cmp.t,c:C.blue},{l:"อบต.",d:cmp.o,c:C.green}].map(({l,d,c})=>(
-            <div key={l} style={{background:c,color:"#fff",borderRadius:10,padding:"12px 14px"}}><div style={{fontWeight:700,marginBottom:6}}>{l}</div><div style={{display:"flex",gap:14}}><div><div style={{fontSize:10,opacity:.75}}>97%</div><div style={{fontSize:16,fontWeight:800}}>{d.p97.toFixed(2)}</div></div><div><div style={{fontSize:10,opacity:.75}}>3%</div><div style={{fontSize:16,fontWeight:800}}>{d.p3.toFixed(2)}</div></div><div><div style={{fontSize:10,opacity:.75}}>รวม</div><div style={{fontSize:16,fontWeight:800}}>{(d.p97+d.p3).toFixed(2)}</div></div></div></div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Summary View ──
-function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,C,fmt,sR}){
-  const th=(w,l=false,bg)=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:"#4a5568",borderBottom:"1px solid #e2e8f0",borderRight:"1px solid #e2e8f0",minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{})});
-  const td={borderBottom:"1px solid #e8ecf0",borderRight:"1px solid #e8ecf0",verticalAlign:"middle"};
+function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR}){
+  const th=(w,l=false,bg)=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
+  const td={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
   const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
   const go=m=>{setMon(m);setMainTab("monthly");setSubTab("monthtable");};
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{fontWeight:800,fontSize:17,color:C.blue,marginBottom:14}}>📊 สรุปยอดรายปี</div>
+      <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📊 สรุปยอดรายปี</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8,marginBottom:18}}>
         {MONTHS.map(m=>{const s=mSum(m);const tot=s.t97+s.t3+s.o97+s.o3;return(
-          <div key={m} onClick={()=>go(m)} style={{background:hasData(m)?"#fff":"#f8f8f8",borderRadius:10,padding:"12px 14px",cursor:"pointer",boxShadow:"0 1px 5px rgba(0,0,0,0.07)",border:`1.5px solid ${hasData(m)?"#bee3f8":"#e8e8e8"}`}}>
-            <div style={{fontWeight:800,fontSize:14,color:hasData(m)?C.blue:"#bbb",marginBottom:4}}>{m}</div>
-            {hasData(m)?<><div style={{fontSize:11,color:"#aaa",marginBottom:3}}>{s.days} วัน</div><div style={{fontSize:17,fontWeight:900,color:C.blue}}>{fmt(tot)}</div><div style={{fontSize:10,color:"#999",marginTop:3,display:"flex",gap:6}}><span style={{color:C.blue}}>ทบ {fmt(s.t97+s.t3)}</span><span style={{color:C.green}}>อบต {fmt(s.o97+s.o3)}</span></div></>:<div style={{fontSize:12,color:"#ccc"}}>ยังไม่มีข้อมูล</div>}
+          <div key={m} onClick={()=>go(m)} style={{background:hasData(m)?T.card:T.card2,borderRadius:10,padding:"12px 14px",cursor:"pointer",boxShadow:`0 1px 5px ${T.shadow}`,border:`1.5px solid ${hasData(m)?T.blue:T.border}`}}>
+            <div style={{fontWeight:800,fontSize:14,color:hasData(m)?T.blue:T.textFaint,marginBottom:4}}>{m}</div>
+            {hasData(m)?<><div style={{fontSize:11,color:T.textMute,marginBottom:3}}>{s.days} วัน</div><div style={{fontSize:17,fontWeight:900,color:T.blue}}>{fmt(tot)}</div><div style={{fontSize:10,color:T.textMute,marginTop:3,display:"flex",gap:6}}><span style={{color:T.blue}}>ทบ {fmt(s.t97+s.t3)}</span><span style={{color:T.green}}>อบต {fmt(s.o97+s.o3)}</span></div></>:<div style={{fontSize:12,color:T.textFaint}}>ยังไม่มีข้อมูล</div>}
           </div>
         );})}
       </div>
-      <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",marginBottom:18}}>
-        <div style={{background:C.blue,color:"#fff",padding:"10px 16px",fontWeight:800,fontSize:14}}>ตารางสรุปยอดแต่ละเดือน</div>
+      <div style={{background:T.card,borderRadius:12,overflow:"hidden",boxShadow:`0 2px 8px ${T.shadow}`,marginBottom:18}}>
+        <div style={{background:T.blue,color:"#fff",padding:"10px 16px",fontWeight:800,fontSize:14}}>ตารางสรุปยอดแต่ละเดือน</div>
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
-            <thead><tr style={{background:"#f1f5f9"}}><th style={th(90,true)}>เดือน</th><th style={th(40)}>วัน</th><th style={th(95)}>ทบ 97%</th><th style={th(85)}>ทบ 3%</th><th style={th(95)}>อบต 97%</th><th style={th(85)}>อบต 3%</th><th style={th(100,false,"#e8f0fe")}>รวมทบ</th><th style={th(100,false,"#e6f4ed")}>รวมอบต</th><th style={th(110,false,"#1a1a2e")}>รวมทั้งหมด</th></tr></thead>
+            <thead><tr><th style={th(90,true)}>เดือน</th><th style={th(40)}>วัน</th><th style={th(95)}>ทบ 97%</th><th style={th(85)}>ทบ 3%</th><th style={th(95)}>อบต 97%</th><th style={th(85)}>อบต 3%</th><th style={{...th(100),background:T.p97Bg}}>รวมทบ</th><th style={{...th(100),background:T.histBg}}>รวมอบต</th><th style={{...th(110),background:"#1a1a2e",color:"#ffd84d"}}>รวมทั้งหมด</th></tr></thead>
             <tbody>
               {MONTHS.map((m,i)=>{const s=mSum(m);const tT=s.t97+s.t3,oT=s.o97+s.o3;return(
-                <tr key={m} style={{background:i%2===0?"#fff":"#fafbfc",cursor:"pointer"}} onClick={()=>go(m)}>
-                  <td style={{...td,fontWeight:700,color:hasData(m)?C.blue:"#bbb",padding:"6px 10px"}}>{m}</td>
-                  <td style={{...td,textAlign:"center",color:"#888"}}>{s.days||"-"}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px"}}>{fmt(s.t97)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:"#999"}}>{fmt(s.t3)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px"}}>{fmt(s.o97)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:"#999"}}>{fmt(s.o3)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:C.blue,background:"#f0f6ff"}}>{fmt(tT)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:C.green,background:"#f0faf4"}}>{fmt(oT)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 10px",fontWeight:800,color:"#1a1a2e",background:"#f5f5fa"}}>{fmt(tT+oT)}</td>
+                <tr key={m} style={{background:i%2===0?T.card:T.rowAlt,cursor:"pointer"}} onClick={()=>go(m)}>
+                  <td style={{...td,fontWeight:700,color:hasData(m)?T.blue:T.textFaint,padding:"6px 10px"}}>{m}</td>
+                  <td style={{...td,textAlign:"center",color:T.textMute}}>{s.days||"-"}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.text}}>{fmt(s.t97)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.textMute}}>{fmt(s.t3)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.text}}>{fmt(s.o97)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.textMute}}>{fmt(s.o3)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:T.blue,background:T.p97Sum}}>{fmt(tT)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:T.green,background:T.histBg}}>{fmt(oT)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 10px",fontWeight:800,color:T.text,background:T.card2}}>{fmt(tT+oT)}</td>
                 </tr>
               );})}
               <tr style={{background:"#1a1a2e",fontWeight:800}}>
@@ -736,19 +678,19 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,C,fmt,sR}
           </table>
         </div>
       </div>
-      <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
-        <div style={{background:C.green,color:"#fff",padding:"10px 16px",fontWeight:800,fontSize:14}}>ยอดรวมรายหน่วยงานตลอดปี</div>
+      <div style={{background:T.card,borderRadius:12,overflow:"hidden",boxShadow:`0 2px 8px ${T.shadow}`}}>
+        <div style={{background:T.green,color:"#fff",padding:"10px 16px",fontWeight:800,fontSize:14}}>ยอดรวมรายหน่วยงานตลอดปี</div>
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
-            <thead><tr style={{background:"#f1f5f9"}}><th style={th(36,true)}>#</th><th style={th(180,true)}>หน่วยงาน</th><th style={th(100)}>97%</th><th style={th(100)}>3%</th><th style={th(110)}>รวม</th></tr></thead>
+            <thead><tr><th style={th(36,true)}>#</th><th style={th(180,true)}>หน่วยงาน</th><th style={th(100)}>97%</th><th style={th(100)}>3%</th><th style={th(110)}>รวม</th></tr></thead>
             <tbody>
-              {[["เทศบาล",TESSABAN,C.blue],["อบต.",OBT,C.green]].map(([grp,list,col])=>(
+              {[["เทศบาล",TESSABAN,T.blue],["อบต.",OBT,T.green]].map(([grp,list,col])=>(
                 <React.Fragment key={grp}>
                   <tr style={{background:col}}><td colSpan={5} style={{padding:"5px 12px",color:"#fff",fontWeight:800,fontSize:13}}>{grp}</td></tr>
                   {list.map((org,i)=>{
-                    const t97=MONTHS.reduce((s,m)=>s+sR(getM(m).table,org,getM(m).days,"p97"),0);
-                    const t3=MONTHS.reduce((s,m)=>s+sR(getM(m).table,org,getM(m).days,"p3"),0);
-                    return(<tr key={org} style={{background:i%2===0?"#fff":"#fafbfc"}}><td style={{...td,textAlign:"center",color:"#bbb",padding:"5px 6px"}}>{i+1}</td><td style={{...td,padding:"5px 10px",fontWeight:500,color:"#2d3748",whiteSpace:"nowrap"}}>{org}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:col}}>{fmt(t97)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:"#999"}}>{fmt(t3)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",fontWeight:700,color:"#1a1a2e"}}>{fmt(t97+t3)}</td></tr>);
+                    const t97=MONTHS.reduce((s,m)=>{const md=getM(m);return s+sR(md.table,org,md.days,"p97");},0);
+                    const t3=MONTHS.reduce((s,m)=>{const md=getM(m);return s+sR(md.table,org,md.days,"p3");},0);
+                    return(<tr key={org} style={{background:i%2===0?T.card:T.rowAlt}}><td style={{...td,textAlign:"center",color:T.textFaint,padding:"5px 6px"}}>{i+1}</td><td style={{...td,padding:"5px 10px",fontWeight:500,color:T.text,whiteSpace:"nowrap"}}>{org}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:col}}>{fmt(t97)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:T.textMute}}>{fmt(t3)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",fontWeight:700,color:T.text}}>{fmt(t97+t3)}</td></tr>);
                   })}
                 </React.Fragment>
               ))}
