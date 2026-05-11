@@ -628,7 +628,9 @@ function ChartView({MONTHS,mSum,hasData,getM,C,fmt,sR,sG}){
             ?<div style={{textAlign:"center",padding:60,color:"#ccc",background:"#fff",borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>🔄</div><div>ยังไม่มีข้อมูลในเดือนที่เลือก</div></div>
             :<div style={{background:"#fff",borderRadius:12,padding:"16px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
               <div style={{fontWeight:700,fontSize:14,color:C.blue,marginBottom:14}}>เปรียบเทียบ {cmpM1} vs {cmpM2}</div>
-              {cmpData().map(r=>{const mx=Math.max(...cmpData().map(x=>Math.max(x.v1,x.v2)),1); return(
+              {cmpData().map(r=>{
+                const mx=Math.max(...cmpData().map(x=>Math.max(x.v1,x.v2)),1);
+                return(
                 <div key={r.name} style={{marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:600,color:"#555",marginBottom:3}}>{r.name}</div>
                   <div style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -640,7 +642,8 @@ function ChartView({MONTHS,mSum,hasData,getM,C,fmt,sR,sG}){
                     <div style={{width:50,fontSize:10,color:"#e8a020"}}>{r.v2>0?fmt(r.v2):"-"}</div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             
               <div style={{display:"flex",gap:16,marginTop:12,fontSize:12}}>
                 <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:8,background:C.blue,borderRadius:2,display:"inline-block"}}/>{cmpM1}</span>
