@@ -151,6 +151,16 @@ function exportBackup(DB) {
   downloadBlob(new Blob([JSON.stringify(DB, null, 2)], {type:"application/json"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.json`);
 }
 
+function useIsMobile() {
+  const [m, setM] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < 640);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return m;
+}
+
 export default function App() {
   const [isDark,   setIsDark]   = useState(() => localStorage.getItem("theme") === "dark");
   const [ready,    setReady]    = useState(false);
@@ -166,8 +176,9 @@ export default function App() {
   const [showDayModal,  setShowDayModal]  = useState(false);
   const [pendingPdf,    setPendingPdf]    = useState(null);
   const [pdfDay,        setPdfDay]        = useState("");
-  const fileRef = useRef(null);
-  const dirty   = useRef(null);
+  const fileRef  = useRef(null);
+  const dirty    = useRef(null);
+  const isMobile = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
 
@@ -276,7 +287,7 @@ export default function App() {
   },[getM]);
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s"}}>
+    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s",paddingBottom:isMobile?64:0}}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet"/>
       <style>{`
         @media print {
@@ -290,24 +301,24 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#1a6bb5)`,color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:12,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
-        <span style={{fontSize:22}}>🏛️</span>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:800,fontSize:14}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
-          <div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → Claude อ่านอัตโนมัติ</div>
+      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#1a6bb5)`,color:"#fff",padding:"0 12px",display:"flex",alignItems:"center",gap:8,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
+        <span style={{fontSize:20}}>🏛️</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:800,fontSize:isMobile?12:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
+          {!isMobile&&<div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → Claude อ่านอัตโนมัติ</div>}
         </div>
-        {saving&&<div style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾 บันทึก...":saving==="saved"?"✅ บันทึกแล้ว":"❌ บันทึกไม่ได้"}</div>}
+        {saving&&<div style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾...":saving==="saved"?"✅":"❌"}</div>}
         <select value={fiscalYear} onChange={e=>{ setFiscalYear(e.target.value); setMon("ตุลาคม"); }}
-          style={{padding:"4px 8px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
+          style={{padding:"4px 6px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:11,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
           {[2566,2567,2568,2569,2570].map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
         </select>
-        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+        {!isMobile&&<div style={{display:"flex",gap:5,alignItems:"center"}}>
           {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?T.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
           ))}
           <button onClick={()=>exportBackup(DB)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup">💾</button>
-          <button onClick={toggleDark} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,background:"rgba(255,255,255,0.15)",color:"#fff"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀️":"🌙"}</button>
-        </div>
+        </div>}
+        <button onClick={toggleDark} style={{padding:"4px 8px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,background:"rgba(255,255,255,0.15)",color:"#fff"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀️":"🌙"}</button>
       </header>
 
       {!ready&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",gap:16}}><div style={{fontSize:42}}>⏳</div><div style={{fontSize:16,color:T.textMute,fontWeight:600}}>กำลังโหลดข้อมูล...</div></div>}
@@ -316,7 +327,7 @@ export default function App() {
         {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?T.msgOkBg:T.msgErrBg,color:msg.ok?T.msgOkTxt:T.msgErrTxt,border:`1px solid ${msg.ok?T.msgOkBdr:T.msgErrBdr}`}}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5,color:msg.ok?T.msgOkTxt:T.msgErrTxt}}>×</button></div>}
 
         {/* MONTHLY */}
-        {mainTab==="monthly"&&<div style={{padding:"12px 16px"}}>
+        {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
           <div className="no-print" style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
             {MONTHS.map(m=>(
               <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?T.blue:hasData(m)?isDark?"#0d2b1a":"#d1fae5":isDark?T.card2:"#e2e8f0",color:mon===m?"#fff":hasData(m)?T.green:T.textMed}}>
@@ -412,7 +423,7 @@ export default function App() {
                 <MTable title="เทศบาล" list={TESSABAN} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
                 <div style={{height:16}}/>
                 <MTable title="อบต." list={OBT} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
-                <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
                   <SCard label="รวมเทศบาล" p97={sG(cur.table,TESSABAN,cur.days,"p97")} p3={sG(cur.table,TESSABAN,cur.days,"p3")} color={T.blue}/>
                   <SCard label="รวม อบต." p97={sG(cur.table,OBT,cur.days,"p97")} p3={sG(cur.table,OBT,cur.days,"p3")} color={T.green}/>
                   <div style={{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"12px 14px"}}>
@@ -427,11 +438,22 @@ export default function App() {
         </div>}
 
         {/* SUMMARY */}
-        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} T={T} fmt={fmt} sR={sR}/>}
+        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} T={T} fmt={fmt} sR={sR} isMobile={isMobile}/>}
 
         {/* CHART */}
-        {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} getM={getM} T={T} fmt={fmt} sR={sR} sG={sG}/>}
+        {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} getM={getM} T={T} fmt={fmt} sR={sR} sG={sG} isMobile={isMobile}/>}
       </>}
+
+      {/* Mobile bottom nav */}
+      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",boxShadow:`0 -2px 8px ${T.shadow}`}}>
+        {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
+          <button key={id} onClick={id==="backup"?()=>exportBackup(DB):()=>setMainTab(id)}
+            style={{flex:1,border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0 5px",gap:2,color:mainTab===id&&id!=="backup"?T.blue:T.textMute,fontFamily:"inherit",transition:"color .15s"}}>
+            <span style={{fontSize:22}}>{ico}</span>
+            <span style={{fontSize:9,fontWeight:700}}>{lbl}</span>
+          </button>
+        ))}
+      </nav>}
     </div>
   );
 }
@@ -514,7 +536,7 @@ function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}){
   );
 }
 
-function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG}){
+function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG,isMobile}){
   const [cmpM1,setCmpM1]=useState("ตุลาคม");
   const [cmpM2,setCmpM2]=useState("พฤศจิกายน");
   const [view,setView]=useState("bar");
@@ -539,7 +561,7 @@ function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG}){
   const cmpMax = useMemo(() => Math.max(...cmpData.map(x=>Math.max(x.v1,x.v2)),1), [cmpData]);
 
   return(
-    <div style={{padding:"14px 16px"}}>
+    <div style={{padding:isMobile?"8px 10px":"14px 16px"}}>
       <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📈 กราฟแสดงยอด</div>
       <div style={{display:"flex",gap:8,marginBottom:18}}>
         <button onClick={()=>setView("bar")} style={{padding:"6px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:view==="bar"?T.blue:T.card2,color:view==="bar"?"#fff":T.textMed}}>📊 ยอดรายเดือน</button>
@@ -629,13 +651,13 @@ function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG}){
   );
 }
 
-function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR}){
+function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile}){
   const th=(w,l=false,bg)=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
   const td={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
   const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
   const go=m=>{setMon(m);setMainTab("monthly");setSubTab("monthtable");};
   return(
-    <div style={{padding:"14px 16px"}}>
+    <div style={{padding:isMobile?"8px 10px":"14px 16px"}}>
       <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📊 สรุปยอดรายปี</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8,marginBottom:18}}>
         {MONTHS.map(m=>{const s=mSum(m);const tot=s.t97+s.t3+s.o97+s.o3;return(
