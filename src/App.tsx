@@ -237,8 +237,8 @@ function rmDayTbl(table: OrgTable, day: string): OrgTable {
   return t;
 }
 
-const n2  = (n: number | string): string => { const v=parseFloat(String(n)); if(!v) return ""; return v%1===0?v.toFixed(0):v.toFixed(2); };
-const fmt = (n: number | null | undefined): string => { if(!n&&n!==0) return "-"; const v=parseFloat(String(n)); if(isNaN(v)||v===0) return "-"; return v.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+const n2  = (n: number | string): string => { if(n===""||n===null||n===undefined) return ""; const v=parseFloat(String(n)); if(isNaN(v)) return ""; return v%1===0?v.toFixed(0):v.toFixed(2); };
+const fmt = (n: number | null | undefined): string => { if(n===null||n===undefined) return "-"; const v=parseFloat(String(n)); if(isNaN(v)) return "-"; if(v===0) return "0.00"; return v.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const sR  = (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3'): number => days.reduce((s,d)=>s+(parseFloat(tbl[org]?.[d]?.[f])||0),0);
 const sD  = (tbl: OrgTable, day: string, lst: string[], f: 'p97' | 'p3'): number  => lst.reduce((s,o)=>s+(parseFloat(tbl[o]?.[day]?.[f])||0),0);
 const sG  = (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3'): number => lst.reduce((s,o)=>s+sR(tbl,o,days,f),0);
@@ -302,20 +302,20 @@ function exportExcel(mon: string, days: string[], table: OrgTable): void {
   downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${mon}.csv`);
 }
 
-function exportBackup(DB: DBState): void {
+function exportBackup(DB: DBState, fiscalYear: string): void {
   const rows: (string | number)[][] = [["ปีงบประมาณ","เดือน","วันที่","หน่วยงาน","97%","3%"]];
   Object.entries(DB).forEach(([mon, md]) => {
     (md.days||[]).forEach(day => {
       ALL.forEach(org => {
         const cell = md.table?.[org]?.[day];
         if (cell?.p97 || cell?.p3) {
-          rows.push(["", mon, day, org, cell.p97||"", cell.p3||""]);
+          rows.push([fiscalYear, mon, day, org, cell.p97||"", cell.p3||""]);
         }
       });
     });
   });
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.csv`);
+  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `backup_tessaban_${fiscalYear}_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
 function useIsMobile(): boolean {
@@ -458,7 +458,6 @@ export default function App() {
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s",paddingBottom:isMobile?64:0}}>
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet"/>
       <style>{`
         @media print {
           .no-print { display:none!important; }
@@ -486,7 +485,7 @@ export default function App() {
           {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?T.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
           ))}
-          <button onClick={()=>exportBackup(DB)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup">💾</button>
+          <button onClick={()=>exportBackup(DB, fiscalYear)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup">💾</button>
         </div>}
         <button onClick={toggleDark} style={{padding:"4px 8px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,background:"rgba(255,255,255,0.15)",color:"#fff"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀️":"🌙"}</button>
       </header>
@@ -617,7 +616,7 @@ export default function App() {
       {/* Mobile bottom nav */}
       {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",boxShadow:`0 -2px 8px ${T.shadow}`}}>
         {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
-          <button key={id} onClick={id==="backup"?()=>exportBackup(DB):()=>setMainTab(id)}
+          <button key={id} onClick={id==="backup"?()=>exportBackup(DB, fiscalYear):()=>setMainTab(id)}
             style={{flex:1,border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0 5px",gap:2,color:mainTab===id&&id!=="backup"?T.blue:T.textMute,fontFamily:"inherit",transition:"color .15s"}}>
             <span style={{fontSize:22}}>{ico}</span>
             <span style={{fontSize:9,fontWeight:700}}>{lbl}</span>
