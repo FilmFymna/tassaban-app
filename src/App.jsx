@@ -46,10 +46,13 @@ const mkTheme = (dark) => ({
   rowAlt:    dark ? "#161922" : "#fafbfc",
   shadow:    dark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.07)",
   shadow2:   dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.2)",
-  p97Bg:     dark ? "#1a2540" : "#f0f6ff",
+  p97Bg:     dark ? "#1e3a5f" : "#f0f6ff",
   p97Sum:    dark ? "#162035" : "#eff6ff",
-  p3Bg:      dark ? "#1e2128" : "#f9f9f9",
+  p3Bg:      dark ? "#252830" : "#f9f9f9",
   p3Sum:     dark ? "#1c1e22" : "#f3f3f3",
+  p97Num:    dark ? "#7eb8f7" : undefined,
+  p3Num:     dark ? "#94a3b8" : undefined,
+  numColor:  dark ? "#e2e8f0" : undefined,
   totRow:    dark ? "#0a0c10" : "#1a1a2e",
   msgOkBg:   dark ? "#0d2b1a" : "#e6f9ee",
   msgOkTxt:  dark ? "#4ade80" : "#1a6b38",
@@ -148,7 +151,19 @@ function exportExcel(mon, days, table) {
 }
 
 function exportBackup(DB) {
-  downloadBlob(new Blob([JSON.stringify(DB, null, 2)], {type:"application/json"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.json`);
+  const rows = [["ปีงบประมาณ","เดือน","วันที่","หน่วยงาน","97%","3%"]];
+  Object.entries(DB).forEach(([mon, md]) => {
+    (md.days||[]).forEach(day => {
+      ALL.forEach(org => {
+        const cell = md.table?.[org]?.[day];
+        if (cell?.p97 || cell?.p3) {
+          rows.push(["", mon, day, org, cell.p97||"", cell.p3||""]);
+        }
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
 function useIsMobile() {
@@ -495,13 +510,13 @@ function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}){
                 <td style={{padding:"3px 8px",borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,fontWeight:500,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:12}}>{org}</td>
                 {days.map(d=><React.Fragment key={d}>
                   <td style={{padding:2,borderBottom:`1px solid ${T.border}`,background:T.p97Bg}}>
-                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p97??""} onChange={e=>setCell(org,d,"p97",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:col,fontWeight:600,boxSizing:"border-box"}}/>
+                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p97??""} onChange={e=>setCell(org,d,"p97",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p97Num||col,fontWeight:600,boxSizing:"border-box"}}/>
                   </td>
                   <td style={{padding:2,borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,background:T.p3Bg}}>
-                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>setCell(org,d,"p3",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.textMute,boxSizing:"border-box"}}/>
+                    <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>setCell(org,d,"p3",e.target.value.replace(/[^0-9.]/g,""))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p3Num||T.textMute,boxSizing:"border-box"}}/>
                   </td>
                 </React.Fragment>)}
-                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:700,color:col,background:T.p97Sum}}>{n2(r97)}</td>
+                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:700,color:T.p97Num||col,background:T.p97Sum}}>{n2(r97)}</td>
                 <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:600,color:T.textMute,background:T.p3Sum}}>{n2(r3)}</td>
                 <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:800,color:T.text,background:"#dbeafe",fontSize:12}}>{n2(r97+r3)}</td>
               </tr>);
@@ -671,7 +686,23 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,
         <div style={{background:T.blue,color:"#fff",padding:"10px 16px",fontWeight:800,fontSize:14}}>ตารางสรุปยอดแต่ละเดือน</div>
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
-            <thead><tr><th style={th(90,true)}>เดือน</th><th style={th(40)}>วัน</th><th style={th(95)}>ทบ 97%</th><th style={th(85)}>ทบ 3%</th><th style={th(95)}>อบต 97%</th><th style={th(85)}>อบต 3%</th><th style={{...th(100),background:T.p97Bg}}>รวมทบ</th><th style={{...th(100),background:T.histBg}}>รวมอบต</th><th style={{...th(110),background:"#1a1a2e",color:"#ffd84d"}}>รวมทั้งหมด</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={th(90,true)} rowSpan={2}>เดือน</th>
+                <th style={th(40)} rowSpan={2}>วัน</th>
+                <th style={{...th(270),background:T.blue,color:"#fff"}} colSpan={3}>เทศบาล</th>
+                <th style={{...th(270),background:T.green,color:"#fff"}} colSpan={3}>อบต.</th>
+                <th style={{...th(110),background:"#1a1a2e",color:"#ffd84d"}} rowSpan={2}>รวมทั้งหมด</th>
+              </tr>
+              <tr>
+                <th style={{...th(85),background:T.p97Bg}}>97%</th>
+                <th style={{...th(80),background:T.p3Bg}}>3%</th>
+                <th style={{...th(90),background:T.blue,color:"#fff"}}>รวม</th>
+                <th style={{...th(85),background:T.p97Bg}}>97%</th>
+                <th style={{...th(80),background:T.p3Bg}}>3%</th>
+                <th style={{...th(90),background:T.green,color:"#fff"}}>รวม</th>
+              </tr>
+            </thead>
             <tbody>
               {MONTHS.map((m,i)=>{const s=mSum(m);const tT=s.t97+s.t3,oT=s.o97+s.o3;return(
                 <tr key={m} style={{background:i%2===0?T.card:T.rowAlt,cursor:"pointer"}} onClick={()=>go(m)}>
@@ -679,9 +710,9 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,
                   <td style={{...td,textAlign:"center",color:T.textMute}}>{s.days||"-"}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.text}}>{fmt(s.t97)}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.textMute}}>{fmt(s.t3)}</td>
+                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:T.blue,background:T.p97Sum}}>{fmt(tT)}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.text}}>{fmt(s.o97)}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 8px",color:T.textMute}}>{fmt(s.o3)}</td>
-                  <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:T.blue,background:T.p97Sum}}>{fmt(tT)}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 8px",fontWeight:700,color:T.green,background:T.histBg}}>{fmt(oT)}</td>
                   <td style={{...td,textAlign:"right",padding:"6px 10px",fontWeight:800,color:T.text,background:T.card2}}>{fmt(tT+oT)}</td>
                 </tr>
@@ -690,9 +721,9 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,
                 <td style={{...td,padding:"8px 10px",color:"#ffd84d",borderColor:"#333"}} colSpan={2}>รวมทั้งปี</td>
                 <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:"#333"}}>{fmt(yr.t97)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:"#333"}}>{fmt(yr.t3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",fontWeight:900,borderColor:"#333"}}>{fmt(yr.t97+yr.t3)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:"#333"}}>{fmt(yr.o97)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:"#333"}}>{fmt(yr.o3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",fontWeight:900,borderColor:"#333"}}>{fmt(yr.t97+yr.t3)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",fontWeight:900,borderColor:"#333"}}>{fmt(yr.o97+yr.o3)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 10px",color:"#ffd84d",fontSize:14,fontWeight:900,borderColor:"#333"}}>{fmt(yr.t97+yr.t3+yr.o97+yr.o3)}</td>
               </tr>
