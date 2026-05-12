@@ -7,7 +7,8 @@
     "dev": "node api-server.js & vite",
     "build": "vite build",
     "preview": "vite preview",
-    "api": "node api-server.js"
+    "api": "node api-server.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -15,9 +16,14 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.7.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "typescript": "^6.0.3",
     "vite": "^5.4.8"
   }
 }

@@ -1,7 +1,155 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
+const sb = createClient(import.meta.env.VITE_SUPABASE_URL as string, import.meta.env.VITE_SUPABASE_KEY as string);
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface CellData {
+  p97: string;
+  p3: string;
+}
+
+interface DayTable {
+  [day: string]: CellData;
+}
+
+interface OrgTable {
+  [org: string]: DayTable;
+}
+
+interface HistoryEntry {
+  day: string;
+  total_p97: number;
+  total_p3: number;
+  total_amount: number;
+}
+
+interface MonthData {
+  days: string[];
+  table: OrgTable;
+  history: HistoryEntry[];
+}
+
+interface DBState {
+  [month: string]: MonthData;
+}
+
+interface Theme {
+  blue: string;
+  green: string;
+  gold: string;
+  red: string;
+  bg: string;
+  card: string;
+  card2: string;
+  card3: string;
+  border: string;
+  border2: string;
+  borderHeavy: string;
+  text: string;
+  textMed: string;
+  textMute: string;
+  textFaint: string;
+  rowAlt: string;
+  shadow: string;
+  shadow2: string;
+  p97Bg: string;
+  p97Sum: string;
+  p3Bg: string;
+  p3Sum: string;
+  p97Num: string | undefined;
+  p3Num: string | undefined;
+  numColor: string | undefined;
+  totRow: string;
+  msgOkBg: string;
+  msgOkTxt: string;
+  msgOkBdr: string;
+  msgErrBg: string;
+  msgErrTxt: string;
+  msgErrBdr: string;
+  tblHeadTxt: string;
+  histBg: string;
+  histBdr: string;
+}
+
+interface Msg {
+  ok: boolean;
+  text: string;
+}
+
+interface MonthSummary {
+  t97: number;
+  t3: number;
+  o97: number;
+  o3: number;
+  days: number;
+}
+
+interface ExtractRow {
+  name: string;
+  matched?: string;
+  count?: number;
+  p97?: number | string;
+  p3?: number | string;
+  amount?: number;
+}
+
+interface ExtractResponse {
+  rows: ExtractRow[];
+  total_count?: number;
+  total_p97?: number;
+  total_p3?: number;
+  total_amount?: number;
+  error?: string;
+}
+
+interface MTableProps {
+  title: string;
+  list: string[];
+  days: string[];
+  table: OrgTable;
+  setCell: (org: string, day: string, field: 'p97' | 'p3', value: string) => void;
+  T: Theme;
+  sR: (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3') => number;
+  sD: (tbl: OrgTable, day: string, lst: string[], f: 'p97' | 'p3') => number;
+  sG: (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3') => number;
+  n2: (n: number | string) => string;
+}
+
+interface SumViewProps {
+  MONTHS: string[];
+  mSum: (m: string) => MonthSummary;
+  hasData: (m: string) => boolean;
+  setMon: (m: string) => void;
+  setMainTab: (tab: string) => void;
+  setSubTab: (tab: string) => void;
+  getM: (m: string) => MonthData;
+  T: Theme;
+  fmt: (n: number | null | undefined) => string;
+  sR: (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3') => number;
+  isMobile: boolean;
+}
+
+interface ChartViewProps {
+  MONTHS: string[];
+  mSum: (m: string) => MonthSummary;
+  getM: (m: string) => MonthData;
+  T: Theme;
+  fmt: (n: number | null | undefined) => string;
+  sR: (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3') => number;
+  sG: (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3') => number;
+  isMobile: boolean;
+}
+
+interface SCardProps {
+  label: string;
+  p97: number;
+  p3: number;
+  color: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const TESSABAN = [
   "เทศบาลเมืองวารินชำราบ","เทศบาลตำบลห้วยขะยูง","เทศบาลตำบลนาเยีย",
@@ -20,14 +168,16 @@ const OBT = [
 const ALL = [...TESSABAN, ...OBT];
 const MONTHS = ["ตุลาคม","พฤศจิกายน","ธันวาคม","มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน"];
 
-const currentFiscalYear = () => {
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+const currentFiscalYear = (): string => {
   const now = new Date();
   const m = now.getMonth()+1;
   const y = now.getFullYear()+543;
   return m >= 10 ? String(y+1) : String(y);
 };
 
-const mkTheme = (dark) => ({
+const mkTheme = (dark: boolean): Theme => ({
   blue:  "#0f4c81",
   green: "#1a7a4a",
   gold:  "#e8a020",
@@ -65,51 +215,53 @@ const mkTheme = (dark) => ({
   histBdr:   dark ? "#166534" : "#86efac",
 });
 
-const initM   = () => ({ days:[], table:{}, history:[] });
-const srtDays = a => [...a].sort((x,y)=>parseInt(x)-parseInt(y));
+const initM = (): MonthData => ({ days:[], table:{}, history:[] });
+const srtDays = (a: string[]): string[] => [...a].sort((x,y)=>parseInt(x)-parseInt(y));
 
-function addDayTbl(table, day) {
+function addDayTbl(table: OrgTable, day: string): OrgTable {
   const t = {...table};
   ALL.forEach(o => { t[o] = {...(t[o]||{}), [day]: t[o]?.[day] || {p97:"",p3:""}}; });
   return t;
 }
 
-function downloadBlob(blob, filename) {
+function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
   a.click(); URL.revokeObjectURL(url);
 }
-function rmDayTbl(table, day) {
+
+function rmDayTbl(table: OrgTable, day: string): OrgTable {
   const t = {...table};
   ALL.forEach(o => { const r={...(t[o]||{})}; delete r[day]; t[o]=r; });
   return t;
 }
 
-const n2  = n => { const v=parseFloat(n); if(!v) return ""; return v%1===0?v.toFixed(0):v.toFixed(2); };
-const fmt = n => { if(!n&&n!==0) return "-"; const v=parseFloat(n); if(isNaN(v)||v===0) return "-"; return v.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); };
-const sR  = (tbl,org,days,f) => days.reduce((s,d)=>s+(parseFloat(tbl[org]?.[d]?.[f])||0),0);
-const sD  = (tbl,day,lst,f)  => lst.reduce((s,o)=>s+(parseFloat(tbl[o]?.[day]?.[f])||0),0);
-const sG  = (tbl,lst,days,f) => lst.reduce((s,o)=>s+sR(tbl,o,days,f),0);
+const n2  = (n: number | string): string => { const v=parseFloat(String(n)); if(!v) return ""; return v%1===0?v.toFixed(0):v.toFixed(2); };
+const fmt = (n: number | null | undefined): string => { if(!n&&n!==0) return "-"; const v=parseFloat(String(n)); if(isNaN(v)||v===0) return "-"; return v.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+const sR  = (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3'): number => days.reduce((s,d)=>s+(parseFloat(tbl[org]?.[d]?.[f])||0),0);
+const sD  = (tbl: OrgTable, day: string, lst: string[], f: 'p97' | 'p3'): number  => lst.reduce((s,o)=>s+(parseFloat(tbl[o]?.[day]?.[f])||0),0);
+const sG  = (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3'): number => lst.reduce((s,o)=>s+sR(tbl,o,days,f),0);
 
-function findOrg(name) {
+function findOrg(name: string | null | undefined): string | null {
   if(!name) return null;
-  const nm = s => s.replace(/\s+/g,"").replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง").replace("อบต.","").replace("อบต","");
+  const nm = (s: string) => s.replace(/\s+/g,"").replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง").replace("อบต.","").replace("อบต","");
   const n=nm(name);
   return ALL.find(o=>{ const m=nm(o); return m===n||m.includes(n)||n.includes(m); })||null;
 }
 
-async function dbLoad(fy) {
+async function dbLoad(fy: string): Promise<DBState> {
   const {data,error}=await sb.from("monthly_data").select("*").like("month", `${fy}_%`);
   if(error) throw error;
-  const out={};
-  (data||[]).forEach(r=>{
+  const out: DBState={};
+  (data||[]).forEach((r: { month: string; days: string[]; table_data: OrgTable; history: HistoryEntry[] })=>{
     const mon = r.month.includes("_") ? r.month.split("_")[1] : r.month;
     out[mon]={days:r.days||[],table:r.table_data||{},history:r.history||[]};
   });
   return out;
 }
-async function dbSave(month, data, fy) {
+
+async function dbSave(month: string, data: MonthData, fy: string): Promise<void> {
   const key = `${fy}_${month}`;
   const {error}=await sb.from("monthly_data").upsert(
     {month:key, days:data.days, table_data:data.table, history:data.history, updated_at:new Date().toISOString()},
@@ -118,17 +270,17 @@ async function dbSave(month, data, fy) {
   if(error) throw error;
 }
 
-function exportExcel(mon, days, table) {
-  const rows = [];
-  const h1 = ["หน่วยงาน"];
-  const h2 = [""];
+function exportExcel(mon: string, days: string[], table: OrgTable): void {
+  const rows: (string | number)[][] = [];
+  const h1: (string | number)[] = ["หน่วยงาน"];
+  const h2: (string | number)[] = [""];
   days.forEach(d => { h1.push(`วันที่ ${d}`, ""); h2.push("97%","3%"); });
   h1.push("รวม 97%","รวม 3%","รวมทั้งหมด");
   h2.push("","","");
   rows.push(h1, h2);
   rows.push(["เทศบาล"]);
   TESSABAN.forEach(org => {
-    const row = [org];
+    const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
     row.push(r97||"", r3||"", r97+r3||"");
@@ -136,13 +288,13 @@ function exportExcel(mon, days, table) {
   });
   rows.push(["อบต."]);
   OBT.forEach(org => {
-    const row = [org];
+    const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
     row.push(r97||"", r3||"", r97+r3||"");
     rows.push(row);
   });
-  const tot = ["รวมทั้งหมด"];
+  const tot: (string | number)[] = ["รวมทั้งหมด"];
   days.forEach(d => { tot.push(sD(table,d,ALL,"p97"), sD(table,d,ALL,"p3")); });
   tot.push(sG(table,ALL,days,"p97"), sG(table,ALL,days,"p3"), sG(table,ALL,days,"p97")+sG(table,ALL,days,"p3"));
   rows.push(tot);
@@ -150,8 +302,8 @@ function exportExcel(mon, days, table) {
   downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${mon}.csv`);
 }
 
-function exportBackup(DB) {
-  const rows = [["ปีงบประมาณ","เดือน","วันที่","หน่วยงาน","97%","3%"]];
+function exportBackup(DB: DBState): void {
+  const rows: (string | number)[][] = [["ปีงบประมาณ","เดือน","วันที่","หน่วยงาน","97%","3%"]];
   Object.entries(DB).forEach(([mon, md]) => {
     (md.days||[]).forEach(day => {
       ALL.forEach(org => {
@@ -166,7 +318,7 @@ function exportBackup(DB) {
   downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `backup_tessaban_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
-function useIsMobile() {
+function useIsMobile(): boolean {
   const [m, setM] = useState(() => window.innerWidth < 640);
   useEffect(() => {
     const h = () => setM(window.innerWidth < 640);
@@ -176,6 +328,8 @@ function useIsMobile() {
   return m;
 }
 
+// ─── App ──────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [isDark,   setIsDark]   = useState(() => localStorage.getItem("theme") === "dark");
   const [ready,    setReady]    = useState(false);
@@ -184,15 +338,15 @@ export default function App() {
   const [mainTab,  setMainTab]  = useState("monthly");
   const [subTab,   setSubTab]   = useState("import");
   const [mon,      setMon]      = useState("ตุลาคม");
-  const [DB,       setDB]       = useState({});
-  const [msg,      setMsg]      = useState(null);
+  const [DB,       setDB]       = useState<DBState>({});
+  const [msg,      setMsg]      = useState<Msg | null>(null);
   const [mDay,     setMDay]     = useState("");
   const [pdfLoading,    setPdfLoading]    = useState(false);
   const [showDayModal,  setShowDayModal]  = useState(false);
-  const [pendingPdf,    setPendingPdf]    = useState(null);
+  const [pendingPdf,    setPendingPdf]    = useState<File | null>(null);
   const [pdfDay,        setPdfDay]        = useState("");
-  const fileRef  = useRef(null);
-  const dirty    = useRef(null);
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const dirty    = useRef<string | null>(null);
   const isMobile = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
@@ -202,11 +356,11 @@ export default function App() {
     return !d;
   });
 
-  const getM    = useCallback(m => DB[m]||initM(), [DB]);
-  const hasData = useCallback(m => (DB[m]?.days?.length||0)>0, [DB]);
+  const getM    = useCallback((m: string): MonthData => DB[m]||initM(), [DB]);
+  const hasData = useCallback((m: string): boolean => (DB[m]?.days?.length||0)>0, [DB]);
   const cur     = getM(mon);
 
-  const setM = useCallback((m,fn) => {
+  const setM = useCallback((m: string, fn: (c: MonthData) => MonthData) => {
     setDB(prev=>{ const c=prev[m]||initM(); return {...prev,[m]:fn(c)}; });
     dirty.current=m;
   },[]);
@@ -228,34 +382,35 @@ export default function App() {
     return()=>clearTimeout(t);
   },[DB,ready]);
 
-  const pushDay = useCallback((d,mo)=>{
+  const pushDay = useCallback((d: string, mo?: string)=>{
     const n=parseInt(d); if(!n||n<1||n>31) return;
     const s=String(n), month=mo||mon;
     setM(month,c=>{ if(c.days.includes(s)) return c; return {...c,days:srtDays([...c.days,s]),table:addDayTbl({...c.table},s)}; });
   },[mon,setM]);
 
-  const dropDay = useCallback(d=>{
+  const dropDay = useCallback((d: string)=>{
     setM(mon,c=>({...c,days:c.days.filter(x=>x!==d),table:rmDayTbl({...c.table},d),history:c.history.filter(h=>h.day!==d)}));
   },[mon,setM]);
 
-  const setCell = useCallback((org,day,f,v)=>{
+  const setCell = useCallback((org: string, day: string, f: 'p97' | 'p3', v: string)=>{
     setM(mon,c=>({...c,table:{...c.table,[org]:{...c.table[org],[day]:{...c.table[org]?.[day],[f]:v}}}}));
   },[mon,setM]);
 
-  const handlePdfPick = (file) => {
+  const handlePdfPick = (file: File | undefined | null) => {
     if (!file) return;
     const ok = file.type === 'application/pdf' || file.type.startsWith('image/');
     if (!ok) { setMsg({ok:false,text:"รองรับเฉพาะ PDF และรูปภาพ"}); return; }
     setPendingPdf(file); setPdfDay(""); setShowDayModal(true);
   };
 
-  const extractPdf = async (file, dayStr) => {
+  const extractPdf = async (file: File | null, dayStr: string) => {
+    if (!file) return;
     setShowDayModal(false); setPdfLoading(true);
     setMsg({ok:true,text:`⏳ Claude กำลังอ่าน PDF วันที่ ${dayStr}...`});
     try {
-      const b64 = await new Promise((res,rej) => {
+      const b64 = await new Promise<string>((res,rej) => {
         const r = new FileReader();
-        r.onload = () => res(r.result.split(',')[1]);
+        r.onload = () => res((r.result as string).split(',')[1]);
         r.onerror = rej;
         r.readAsDataURL(file);
       });
@@ -264,7 +419,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64: b64, mimeType: file.type })
       });
-      let parsed;
+      let parsed: ExtractResponse;
       try { parsed = await resp.json(); } catch { throw new Error('API ไม่ตอบสนอง — ตรวจสอบว่า API server รันอยู่'); }
       if (!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
@@ -290,13 +445,13 @@ export default function App() {
       setMsg({ok:true, text:`✅ Claude อ่านสำเร็จ! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
       setSubTab("monthtable");
     } catch(e) {
-      setMsg({ok:false, text:`❌ ${e.message}`});
+      setMsg({ok:false, text:`❌ ${(e as Error).message}`});
     } finally {
       setPdfLoading(false); setPendingPdf(null);
     }
   };
 
-  const mSum = useCallback(m=>{
+  const mSum = useCallback((m: string): MonthSummary =>{
     const {days,table}=getM(m);
     return{t97:sG(table,TESSABAN,days,"p97"),t3:sG(table,TESSABAN,days,"p3"),o97:sG(table,OBT,days,"p97"),o3:sG(table,OBT,days,"p3"),days:days.length};
   },[getM]);
@@ -393,7 +548,7 @@ export default function App() {
                 {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
               </div>
               <div style={{fontSize:13,color:T.textMute}}>รองรับ PDF · PNG · JPG · Claude อ่านและจัดข้อมูลอัตโนมัติ</div>
-              <input ref={fileRef} type="file" accept=".pdf,image/*" style={{display:"none"}} onChange={e=>handlePdfPick(e.target.files[0])}/>
+              <input ref={fileRef} type="file" accept=".pdf,image/*" style={{display:"none"}} onChange={e=>handlePdfPick(e.target.files?.[0])}/>
             </div>
 
             {/* Manual day add */}
@@ -473,7 +628,9 @@ export default function App() {
   );
 }
 
-function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}){
+// ─── MTable ───────────────────────────────────────────────────────────────────
+
+function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}: MTableProps){
   const col=title==="เทศบาล"?T.blue:T.green;
   const NW=160,CW=48;
   const hdr97=sG(table,list,days,"p97"), hdr3=sG(table,list,days,"p3");
@@ -551,7 +708,9 @@ function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}){
   );
 }
 
-function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG,isMobile}){
+// ─── ChartView ────────────────────────────────────────────────────────────────
+
+function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG,isMobile}: ChartViewProps){
   const [cmpM1,setCmpM1]=useState("ตุลาคม");
   const [cmpM2,setCmpM2]=useState("พฤศจิกายน");
   const [view,setView]=useState("bar");
@@ -666,11 +825,13 @@ function ChartView({MONTHS,mSum,getM,T,fmt,sR,sG,isMobile}){
   );
 }
 
-function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile}){
-  const th=(w,l=false,bg)=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
-  const td={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
+// ─── SumView ──────────────────────────────────────────────────────────────────
+
+function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile}: SumViewProps){
+  const th=(w: number,l=false,bg?: string): React.CSSProperties=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
+  const td: React.CSSProperties={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
   const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
-  const go=m=>{setMon(m);setMainTab("monthly");setSubTab("monthtable");};
+  const go=(m: string)=>{setMon(m);setMainTab("monthly");setSubTab("monthtable");};
   return(
     <div style={{padding:isMobile?"8px 10px":"14px 16px"}}>
       <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📊 สรุปยอดรายปี</div>
@@ -737,7 +898,7 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,
           <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
             <thead><tr><th style={th(36,true)}>#</th><th style={th(180,true)}>หน่วยงาน</th><th style={th(100)}>97%</th><th style={th(100)}>3%</th><th style={th(110)}>รวม</th></tr></thead>
             <tbody>
-              {[["เทศบาล",TESSABAN,T.blue],["อบต.",OBT,T.green]].map(([grp,list,col])=>(
+              {([["เทศบาล",TESSABAN,T.blue],["อบต.",OBT,T.green]] as [string, string[], string][]).map(([grp,list,col])=>(
                 <React.Fragment key={grp}>
                   <tr style={{background:col}}><td colSpan={5} style={{padding:"5px 12px",color:"#fff",fontWeight:800,fontSize:13}}>{grp}</td></tr>
                   {list.map((org,i)=>{
@@ -755,6 +916,8 @@ function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,
   );
 }
 
-function SCard({label,p97,p3,color}){
+// ─── SCard ────────────────────────────────────────────────────────────────────
+
+function SCard({label,p97,p3,color}: SCardProps){
   return(<div style={{background:color,color:"#fff",borderRadius:10,padding:"12px 14px"}}><div style={{fontSize:11,opacity:.8,marginBottom:5}}>{label}</div><div style={{display:"flex",gap:10}}><div><div style={{fontSize:10,opacity:.7}}>97%</div><div style={{fontSize:14,fontWeight:800}}>{p97.toFixed(2)}</div></div><div><div style={{fontSize:10,opacity:.7}}>3%</div><div style={{fontSize:14,fontWeight:800}}>{p3.toFixed(2)}</div></div><div><div style={{fontSize:10,opacity:.7}}>รวม</div><div style={{fontSize:14,fontWeight:800,color:"#ffd84d"}}>{(p97+p3).toFixed(2)}</div></div></div></div>);
 }
