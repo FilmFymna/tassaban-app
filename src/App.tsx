@@ -284,7 +284,7 @@ function exportExcel(mon: string, days: string[], table: OrgTable): void {
   rows.push(["เทศบาล"]);
   TESSABAN.forEach(org => {
     const row: (string | number)[] = [org];
-    days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
+    days.forEach(d => { row.push(table[org]?.[d]?.p97??""  , table[org]?.[d]?.p3??""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
     row.push(r97, r3, r97+r3);
     rows.push(row);
@@ -292,7 +292,7 @@ function exportExcel(mon: string, days: string[], table: OrgTable): void {
   rows.push(["อบต."]);
   OBT.forEach(org => {
     const row: (string | number)[] = [org];
-    days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
+    days.forEach(d => { row.push(table[org]?.[d]?.p97??"", table[org]?.[d]?.p3??""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
     row.push(r97, r3, r97+r3);
     rows.push(row);
@@ -370,22 +370,29 @@ export default function App() {
 
   useEffect(()=>{
     setReady(false); setDB({});
+    dirty.current.clear();
     dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(console.error).finally(()=>setReady(true));
   },[fiscalYear]);
+
+  const DBRef = useRef<DBState>(DB);
+  useEffect(() => { DBRef.current = DB; }, [DB]);
 
   useEffect(()=>{
     if(!ready) return;
     const t=setTimeout(async()=>{
       const months=[...dirty.current];
       if(!months.length) return;
-      dirty.current.clear();
+      // Snapshot the months to save BEFORE clearing, in case save fails
       setSaving("saving");
       try{
+        const snapshot = DBRef.current;
         await Promise.all(months.map(m=>{
-          const md=DB[m];
+          const md=snapshot[m];
           if(!md) return Promise.resolve();
           return dbSave(m,md,fiscalYear);
         }));
+        // Only clear dirty after successful save
+        months.forEach(m => dirty.current.delete(m));
         setSaving("saved"); setTimeout(()=>setSaving(""),2500);
       }
       catch(e){ console.error(e); setSaving("error"); }
@@ -416,6 +423,9 @@ export default function App() {
 
   const extractPdf = async (file: File | null, dayStr: string) => {
     if (!file) return;
+    // Capture the active month at the moment the user confirmed extraction,
+    // so stale-closure issues can't cause data to land in the wrong month.
+    const activeMon = mon;
     setShowDayModal(false); setPdfLoading(true);
     setMsg({ok:true,text:`⏳ Claude กำลังอ่าน PDF วันที่ ${dayStr}...`});
     try {
@@ -435,16 +445,17 @@ export default function App() {
       if (!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
 
-      if (getM(mon).history.find(h=>h.day===dayStr)) {
-        if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${mon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { setPdfLoading(false); return; }
+      if (getM(activeMon).history.find(h=>h.day===dayStr)) {
+        if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { return; }
       }
 
-      setM(mon, c => {
+      setM(activeMon, c => {
         const nd = c.days.includes(dayStr) ? c.days : srtDays([...c.days, dayStr]);
         const nt = addDayTbl({...c.table}, dayStr);
         parsed.rows.forEach(r => {
           const f = findOrg(r.matched || r.name);
-          if (f && (r.p97 || r.p3)) nt[f][dayStr] = {p97: r.p97?String(r.p97):"", p3: r.p3?String(r.p3):""};
+          // Use nullish check so that a value of 0 is still stored correctly
+          if (f && (r.p97 != null || r.p3 != null)) nt[f][dayStr] = {p97: r.p97!=null?String(r.p97):"", p3: r.p3!=null?String(r.p3):""};
         });
         const nh = [...c.history.filter(h=>h.day!==dayStr),
           {day:dayStr, total_p97:parsed.total_p97||0, total_p3:parsed.total_p3||0, total_amount:parsed.total_amount||0}
@@ -537,7 +548,7 @@ export default function App() {
                     autoFocus
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>setShowDayModal(false)} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
+                    <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPdfDay(""); }} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
                     <button onClick={()=>{if(pdfDay)extractPdf(pendingPdf,String(parseInt(pdfDay)));}} disabled={!pdfDay}
                       style={{flex:2,padding:10,background:pdfDay?T.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>
                       🔍 อ่านข้อมูล
