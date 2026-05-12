@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node api-server.js & vite",
+    "dev": "concurrently \"node api-server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "api": "node api-server.js",
@@ -21,6 +21,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.2.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "typescript": "^6.0.3",

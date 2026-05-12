@@ -228,7 +228,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
-  a.click(); URL.revokeObjectURL(url);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function rmDayTbl(table: OrgTable, day: string): OrgTable {
@@ -283,7 +286,7 @@ function exportExcel(mon: string, days: string[], table: OrgTable): void {
     const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
-    row.push(r97||"", r3||"", r97+r3||"");
+    row.push(r97, r3, r97+r3);
     rows.push(row);
   });
   rows.push(["อบต."]);
@@ -291,7 +294,7 @@ function exportExcel(mon: string, days: string[], table: OrgTable): void {
     const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97||"", table[org]?.[d]?.p3||""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
-    row.push(r97||"", r3||"", r97+r3||"");
+    row.push(r97, r3, r97+r3);
     rows.push(row);
   });
   const tot: (string | number)[] = ["รวมทั้งหมด"];
@@ -346,7 +349,7 @@ export default function App() {
   const [pendingPdf,    setPendingPdf]    = useState<File | null>(null);
   const [pdfDay,        setPdfDay]        = useState("");
   const fileRef  = useRef<HTMLInputElement>(null);
-  const dirty    = useRef<string | null>(null);
+  const dirty    = useRef<Set<string>>(new Set());
   const isMobile = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
@@ -362,7 +365,7 @@ export default function App() {
 
   const setM = useCallback((m: string, fn: (c: MonthData) => MonthData) => {
     setDB(prev=>{ const c=prev[m]||initM(); return {...prev,[m]:fn(c)}; });
-    dirty.current=m;
+    dirty.current.add(m);
   },[]);
 
   useEffect(()=>{
@@ -373,14 +376,22 @@ export default function App() {
   useEffect(()=>{
     if(!ready) return;
     const t=setTimeout(async()=>{
-      const m=dirty.current; if(!m) return; dirty.current=null;
-      const md=DB[m]; if(!md) return;
+      const months=[...dirty.current];
+      if(!months.length) return;
+      dirty.current.clear();
       setSaving("saving");
-      try{ await dbSave(m, md, fiscalYear); setSaving("saved"); setTimeout(()=>setSaving(""),2500); }
+      try{
+        await Promise.all(months.map(m=>{
+          const md=DB[m];
+          if(!md) return Promise.resolve();
+          return dbSave(m,md,fiscalYear);
+        }));
+        setSaving("saved"); setTimeout(()=>setSaving(""),2500);
+      }
       catch(e){ console.error(e); setSaving("error"); }
     },1200);
     return()=>clearTimeout(t);
-  },[DB,ready]);
+  },[DB,ready,fiscalYear]);
 
   const pushDay = useCallback((d: string, mo?: string)=>{
     const n=parseInt(d); if(!n||n<1||n>31) return;
@@ -424,7 +435,7 @@ export default function App() {
       if (!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
 
-      if (cur.history.find(h=>h.day===dayStr)) {
+      if (getM(mon).history.find(h=>h.day===dayStr)) {
         if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${mon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { setPdfLoading(false); return; }
       }
 
