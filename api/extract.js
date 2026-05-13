@@ -32,12 +32,14 @@ export default async function handler(req, res) {
       ]
     }];
 
-    const response = await client.beta.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      messages,
-      betas: ['pdfs-2024-09-25'],
-    });
+    const response = await client.messages.create(
+      {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        messages,
+      },
+      { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } }
+    );
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     const m = text.match(/\{[\s\S]*\}/);
