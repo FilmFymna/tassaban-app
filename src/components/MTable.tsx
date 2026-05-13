@@ -65,14 +65,14 @@ const MTable = React.memo(function MTable({title,list,days,table,setCell,T,sR,sD
                 <td style={{padding:"5px 4px",background:T.card3}}/>
                 <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:T.textMed,background:T.card2,fontSize:12,borderRight:`2px solid ${T.borderHeavy}`}}>{n2(sD(table,d,list,"p3"))}</td>
               </React.Fragment>)}
-              <td style={{padding:"5px 6px",textAlign:"right",background:"#555",color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(hdr3)}</td>
+              <td style={{padding:"5px 6px",textAlign:"right",background:T.sum3Bg,color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(hdr3)}</td>
             </tr>
             <tr style={{background:T.totRow}}>
-              <td style={{padding:"6px 8px",fontWeight:900,color:"#ffd84d",borderRight:`2px solid #333`,fontSize:12}}>รวมทั้งหมด</td>
+              <td style={{padding:"6px 8px",fontWeight:900,color:T.totGold,borderRight:`2px solid ${T.borderHeavy}`,fontSize:12}}>รวมทั้งหมด</td>
               {days.map(d=><React.Fragment key={d}>
-                <td colSpan={2} style={{padding:"6px 4px",textAlign:"right",fontWeight:900,color:"#ffd84d",background:T.totRow,fontSize:13,borderRight:"2px solid #333"}}>{n2(sD(table,d,list,"p97")+sD(table,d,list,"p3"))}</td>
+                <td colSpan={2} style={{padding:"6px 4px",textAlign:"right",fontWeight:900,color:T.totGold,background:T.totRow,fontSize:13,borderRight:`2px solid ${T.borderHeavy}`}}>{n2(sD(table,d,list,"p97")+sD(table,d,list,"p3"))}</td>
               </React.Fragment>)}
-              <td style={{padding:"6px 6px",textAlign:"right",background:"#0057A8",color:"#ffd84d",fontWeight:900,fontSize:14}} colSpan={3}>{n2(hdr97+hdr3)}</td>
+              <td style={{padding:"6px 6px",textAlign:"right",background:T.blue,color:T.totGold,fontWeight:900,fontSize:14}} colSpan={3}>{n2(hdr97+hdr3)}</td>
             </tr>
           </tbody>
         </table>

@@ -29,6 +29,8 @@ export const mkTheme = (dark: boolean): Theme => ({
   p3Num:     dark ? "#ffb840" : undefined,
   numColor:  dark ? "#e2e8f0" : undefined,
   totRow:    dark ? "#0a0c10" : "#1a2744",
+  totGold:   "#ffd84d",
+  sum3Bg:    "#555",
   msgOkBg:   dark ? "#0d2b1a" : "#e6f9ee",
   msgOkTxt:  dark ? "#4ade80" : "#1a6b38",
   msgOkBdr:  dark ? "#166534" : "#9de0b6",

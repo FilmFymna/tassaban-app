@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { SumViewProps } from '../types';
-import { TESSABAN, OBT } from '../data/orgs';
+import { TESSABAN, OBT, ALL } from '../data/orgs';
 
 export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile}: SumViewProps){
   const th=(w: number,l=false,bg?: string): React.CSSProperties=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
   const td: React.CSSProperties={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
   const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
+  const orgTotals = useMemo(() => {
+    const m: Record<string,{t97:number,t3:number}> = {};
+    ALL.forEach(org => {
+      m[org] = {
+        t97: MONTHS.reduce((s,mon) => { const md=getM(mon); return s+sR(md.table,org,md.days,"p97"); }, 0),
+        t3:  MONTHS.reduce((s,mon) => { const md=getM(mon); return s+sR(md.table,org,md.days,"p3"); }, 0),
+      };
+    });
+    return m;
+  }, [MONTHS, getM, sR]);
   const go=(m: string)=>{setMon(m);setMainTab("monthly");setSubTab("monthtable");};
   return(
     <div style={{padding:isMobile?"8px 10px":"14px 16px"}}>
@@ -53,15 +63,15 @@ export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab
                   <td style={{...td,textAlign:"right",padding:"6px 10px",fontWeight:800,color:T.text,background:T.card2}}>{fmt(tT+oT)}</td>
                 </tr>
               );})}
-              <tr style={{background:"#1a1a2e",fontWeight:800}}>
-                <td style={{...td,padding:"8px 10px",color:"#ffd84d",borderColor:"#333"}} colSpan={2}>รวมทั้งปี</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:"#333"}}>{fmt(yr.t97)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:"#333"}}>{fmt(yr.t3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",fontWeight:900,borderColor:"#333"}}>{fmt(yr.t97+yr.t3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:"#333"}}>{fmt(yr.o97)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:"#333"}}>{fmt(yr.o3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",fontWeight:900,borderColor:"#333"}}>{fmt(yr.o97+yr.o3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 10px",color:"#ffd84d",fontSize:14,fontWeight:900,borderColor:"#333"}}>{fmt(yr.t97+yr.t3+yr.o97+yr.o3)}</td>
+              <tr style={{background:T.totRow,fontWeight:800}}>
+                <td style={{...td,padding:"8px 10px",color:T.totGold,borderColor:T.borderHeavy}} colSpan={2}>รวมทั้งปี</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:T.borderHeavy}}>{fmt(yr.t97)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:T.borderHeavy}}>{fmt(yr.t3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.t97+yr.t3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:T.borderHeavy}}>{fmt(yr.o97)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:T.borderHeavy}}>{fmt(yr.o3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.o97+yr.o3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 10px",color:T.totGold,fontSize:14,fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.t97+yr.t3+yr.o97+yr.o3)}</td>
               </tr>
             </tbody>
           </table>
@@ -77,8 +87,7 @@ export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab
                 <React.Fragment key={grp}>
                   <tr style={{background:col}}><td colSpan={5} style={{padding:"5px 12px",color:"#fff",fontWeight:800,fontSize:13}}>{grp}</td></tr>
                   {list.map((org,i)=>{
-                    const t97=MONTHS.reduce((s,m)=>{const md=getM(m);return s+sR(md.table,org,md.days,"p97");},0);
-                    const t3=MONTHS.reduce((s,m)=>{const md=getM(m);return s+sR(md.table,org,md.days,"p3");},0);
+                    const {t97,t3}=orgTotals[org]||{t97:0,t3:0};
                     return(<tr key={org} style={{background:i%2===0?T.card:T.rowAlt}}><td style={{...td,textAlign:"center",color:T.textFaint,padding:"5px 6px"}}>{i+1}</td><td style={{...td,padding:"5px 10px",fontWeight:500,color:T.text,whiteSpace:"nowrap"}}>{org}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:col}}>{fmt(t97)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",color:T.textMute}}>{fmt(t3)}</td><td style={{...td,textAlign:"right",padding:"5px 8px",fontWeight:700,color:T.text}}>{fmt(t97+t3)}</td></tr>);
                   })}
                 </React.Fragment>

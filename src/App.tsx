@@ -14,7 +14,6 @@ import MTable   from './components/MTable';
 import ChartView from './components/ChartView';
 import SumView  from './components/SumView';
 import SCard    from './components/SCard';
-export { ErrorBoundary } from './components/ErrorBoundary';
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
 
@@ -238,7 +237,7 @@ export default function App() {
   }, [startExtract]);
 
   // Submit day modal — uses pre-loaded result if available, else error
-  const handleDaySubmit = useCallback(async (dayStr: string) => {
+  const handleDaySubmit = useCallback((dayStr: string) => {
     const activeMon = mon;
     setShowDayModal(false);
 
@@ -247,26 +246,24 @@ export default function App() {
       return;
     }
 
-    // Check duplicate day
+    const captured = pendingResult;
+    const proceed = () => {
+      setMsg({ ok:true, text:`✅ Claude อ่านสำเร็จ! กรุณาตรวจสอบข้อมูลก่อนบันทึก` });
+      setReviewData({ parsed: captured, dayStr, activeMon });
+      setPendingResult(null);
+      setPendingPdf(null);
+    };
+
     if(getM(activeMon).history.find(h => h.day === dayStr)) {
-      let userCancelled = false;
-      await new Promise<void>((resolve, reject) => {
-        setConfirmDialog({
-          message: `⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`,
-          onConfirm: resolve,
-          onCancel: reject,
-        });
-      }).catch(() => { userCancelled = true; });
-      if(userCancelled) {
-        setPendingResult(null); setPendingPdf(null);
-        return;
-      }
+      setConfirmDialog({
+        message: `⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`,
+        onConfirm: proceed,
+        onCancel: () => { setPendingResult(null); setPendingPdf(null); },
+      });
+      return;
     }
 
-    setMsg({ ok:true, text:`✅ Claude อ่านสำเร็จ! กรุณาตรวจสอบข้อมูลก่อนบันทึก` });
-    setReviewData({ parsed: pendingResult, dayStr, activeMon });
-    setPendingResult(null);
-    setPendingPdf(null);
+    proceed();
   }, [mon, pendingResult, getM]);
 
   // Item 8: validate numbers + save
@@ -531,8 +528,8 @@ export default function App() {
                 <div style={{height:16}}/>
                 <MTable title="อบต." list={OBT} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
-                  <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue}/>
-                  <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green}/>
+                  <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue} gold={T.totGold}/>
+                  <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green} gold={T.totGold}/>
                   <div style={{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"12px 14px"}}>
                     <div style={{fontSize:11,opacity:.7,marginBottom:3}}>ยอดรวมเดือน{mon}</div>
                     <div style={{fontSize:20,fontWeight:900,color:T.gold}}>{(aSum97+aSum3).toFixed(2)}</div>

@@ -25,7 +25,7 @@ export interface Theme {
   rowAlt: string; shadow: string; shadow2: string;
   p97Bg: string; p97Sum: string; p3Bg: string; p3Sum: string;
   p97Num: string | undefined; p3Num: string | undefined; numColor: string | undefined;
-  totRow: string;
+  totRow: string; totGold: string; sum3Bg: string;
   msgOkBg: string; msgOkTxt: string; msgOkBdr: string;
   msgErrBg: string; msgErrTxt: string; msgErrBdr: string;
   tblHeadTxt: string; histBg: string; histBdr: string;
@@ -57,4 +57,4 @@ export interface ChartViewProps {
   isMobile: boolean;
 }
 
-export interface SCardProps { label: string; p97: number; p3: number; color: string; }
+export interface SCardProps { label: string; p97: number; p3: number; color: string; gold: string; }

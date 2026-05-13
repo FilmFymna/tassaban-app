@@ -37,6 +37,7 @@ export default async function handler(req, res) {
     const isPdf = mimeType === 'application/pdf';
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: AbortSignal.timeout(25000),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': KEY,
