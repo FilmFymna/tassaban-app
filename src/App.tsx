@@ -355,31 +355,40 @@ export default function App() {
   const aSum3  = tSum3  + oSum3;
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s",paddingBottom:isMobile?64:0}}>
+    <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .15s",paddingBottom:isMobile?64:0}}>
       <style>{`
         @media print { .no-print{display:none!important;} .print-only{display:block!important;} body{background:#fff!important;margin:0;} *{-webkit-print-color-adjust:exact;print-color-adjust:exact;} @page{size:A4 landscape;margin:10mm;} }
         .print-only{display:none;}
+        *{box-sizing:border-box;}
+        ::-webkit-scrollbar{width:5px;height:5px;}
+        ::-webkit-scrollbar-track{background:transparent;}
+        ::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#CBD5E1"};border-radius:3px;}
+        input[type=text]:focus{outline:2px solid ${T.blue};outline-offset:0;}
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#0080CF)`,color:"#fff",padding:"0 12px",display:"flex",alignItems:"center",gap:8,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
-        <span style={{fontSize:20}}>🏛️</span>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:800,fontSize:isMobile?12:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
-          {!isMobile&&<div style={{fontSize:10,opacity:.75}}>ปีงบประมาณ {fiscalYear} | ส่ง PDF → Claude อ่านอัตโนมัติ</div>}
+      <header className="no-print" style={{background:isDark?"#0D1117":"#0F172A",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${isDark?"#1A2540":"#1E293B"}`,position:"sticky",top:0,zIndex:100,minHeight:52}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,paddingRight:20,borderRight:`1px solid rgba(255,255,255,0.1)`}}>
+          <span style={{fontSize:18,lineHeight:1}}>🏛️</span>
+          <div style={{minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:isMobile?11:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:"0.01em"}}>เทศบาล / อบต. วารินชำราบ</div>
+            {!isMobile&&<div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:1}}>ปีงบประมาณ {fiscalYear}</div>}
+          </div>
         </div>
-        {saving&&<div style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾...":saving==="saved"?"✅":"❌"}</div>}
-        <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
-          style={{padding:"4px 6px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:11,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
-          {Array.from({length:6},(_,i)=>parseInt(fiscalYear)-3+i).map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
-        </select>
-        {!isMobile&&<div style={{display:"flex",gap:5,alignItems:"center"}}>
-          {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mainTab===id?T.gold:"rgba(255,255,255,0.15)",color:mainTab===id?"#1a1a1a":"#fff"}}>{lbl}</button>
+        {!isMobile&&<div style={{display:"flex",alignItems:"stretch",flex:1,marginLeft:4}}>
+          {[["monthly","รายเดือน"],["summary","รายปี"],["chart","กราฟ"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"0 14px",height:52,border:"none",borderBottom:`2px solid ${mainTab===id?T.gold:"transparent"}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:400,background:"transparent",color:mainTab===id?"#fff":"rgba(255,255,255,0.5)",transition:"color .15s,border-color .15s"}}>{lbl}</button>
           ))}
-          <button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff"}} title="Backup">💾</button>
         </div>}
-        <button onClick={toggleDark} style={{padding:"4px 8px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,background:"rgba(255,255,255,0.15)",color:"#fff"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀️":"🌙"}</button>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
+          {saving&&<div style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"บันทึกไม่ได้"}</div>}
+          {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
+          <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
+            style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
+            {Array.from({length:6},(_,i)=>parseInt(fiscalYear)-3+i).map(y=><option key={y} value={String(y)} style={{color:"#000",background:"#1e293b"}}>ปี {y}</option>)}
+          </select>
+          <button onClick={toggleDark} style={{width:32,height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontFamily:"inherit",fontSize:13,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀":"🌙"}</button>
+        </div>
       </header>
 
       {!ready&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",gap:16}}><div style={{fontSize:42}}>⏳</div><div style={{fontSize:16,color:T.textMute,fontWeight:600}}>กำลังโหลดข้อมูล...</div></div>}
@@ -408,17 +417,17 @@ export default function App() {
 
         {/* MONTHLY */}
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
-          <div className="no-print" style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+          <div className="no-print" style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
             {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?T.blue:hasData(m)?isDark?"#0d2040":"#dce8f5":isDark?T.card2:"#e2e8f0",color:mon===m?"#fff":hasData(m)?T.green:T.textMed}}>
-                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:T.green,borderRadius:"50%",border:"1.5px solid #fff"}}/>}
+              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?T.blue:hasData(m)?T.blue+"55":T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?T.blue:hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":hasData(m)?T.blue:T.textMute,transition:"all .12s"}}>
+                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:6,height:6,background:T.blue,borderRadius:"50%",border:`1.5px solid ${T.bg}`}}/>}
               </button>
             ))}
           </div>
 
-          <div className="no-print" style={{display:"flex",background:T.card,borderRadius:10,overflow:"hidden",boxShadow:`0 1px 4px ${T.shadow}`,width:"fit-content",marginBottom:14}}>
-            {[["import","📋 นำเข้า"],["monthtable","📅 ตารางเดือน"]].map(([id,lbl])=>(
-              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 15px",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:subTab===id?T.blue:"transparent",color:subTab===id?"#fff":T.textMed}}>{lbl}</button>
+          <div className="no-print" style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:16,gap:0}}>
+            {[["import","นำเข้า"],["monthtable","ตารางเดือน"]].map(([id,lbl])=>(
+              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 16px",border:"none",borderBottom:`2px solid ${subTab===id?T.blue:"transparent"}`,marginBottom:-1,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:subTab===id?700:400,background:"transparent",color:subTab===id?T.blue:T.textMute,transition:"color .12s,border-color .12s"}}>{lbl}</button>
             ))}
           </div>
 
@@ -427,9 +436,9 @@ export default function App() {
 
             {/* Day modal */}
             {showDayModal&&(
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-                <div style={{background:T.card,borderRadius:16,padding:"28px 28px",width:"100%",maxWidth:340,boxShadow:`0 8px 40px ${T.shadow2}`}}>
-                  <div style={{fontWeight:800,fontSize:20,color:T.blue,marginBottom:4}}>📅 วันที่ในเอกสาร</div>
+              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                <div style={{background:T.card,borderRadius:10,padding:"24px",width:"100%",maxWidth:340,boxShadow:`0 8px 48px ${T.shadow2}`,border:`1px solid ${T.border}`}}>
+                  <div style={{fontWeight:700,fontSize:15,color:T.text,marginBottom:4,letterSpacing:"0.01em"}}>วันที่ในเอกสาร</div>
                   <div style={{fontSize:13,color:T.textMute,marginBottom:4}}>เดือน {mon} — วันที่เท่าไร?</div>
                   {pdfQueue.length>0&&<div style={{fontSize:11,color:T.gold,marginBottom:10,fontWeight:600}}>📂 คิว: เหลืออีก {pdfQueue.length} ไฟล์</div>}
                   {pdfLoading
@@ -444,10 +453,10 @@ export default function App() {
                     autoFocus
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>ยกเลิก</button>
+                    <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
                     <button onClick={()=>{if(pdfDay&&pendingResult)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult}
-                      style={{flex:2,padding:10,background:pdfDay&&pendingResult?T.blue:"#ccc",color:"#fff",border:"none",borderRadius:10,cursor:pdfDay&&pendingResult?"pointer":"default",fontFamily:"inherit",fontSize:15,fontWeight:800}}>
-                      🔍 ยืนยัน
+                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult?T.blue:"#334155",color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
+                      ยืนยัน
                     </button>
                   </div>
                 </div>
@@ -459,29 +468,29 @@ export default function App() {
               onDrop={e=>{e.preventDefault();handleFilesSelected(e.dataTransfer.files);}}
               onDragOver={e=>e.preventDefault()}
               onClick={()=>!pdfLoading&&fileRef.current?.click()}
-              style={{border:`2.5px dashed ${pdfLoading?T.textFaint:T.blue}`,borderRadius:14,padding:"36px 24px",textAlign:"center",background:T.card,cursor:pdfLoading?"default":"pointer",boxShadow:`0 2px 8px ${T.shadow}`,marginBottom:14}}>
-              <div style={{fontSize:46,marginBottom:10}}>{pdfLoading?"⏳":"📄"}</div>
-              <div style={{fontSize:17,fontWeight:800,color:pdfLoading?T.textFaint:T.blue,marginBottom:6}}>
+              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:T.blue}`,borderRadius:8,padding:"32px 24px",textAlign:"center",background:T.card,cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
+              <div style={{fontSize:36,marginBottom:10,opacity:pdfLoading?0.4:0.8}}>{pdfLoading?"⏳":"📄"}</div>
+              <div style={{fontSize:14,fontWeight:600,color:pdfLoading?T.textFaint:T.blue,marginBottom:5,letterSpacing:"0.01em"}}>
                 {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
               </div>
-              <div style={{fontSize:13,color:T.textMute}}>รองรับ PDF · PNG · JPG · เลือกหลายไฟล์ได้พร้อมกัน</div>
+              <div style={{fontSize:11,color:T.textFaint}}>PDF · PNG · JPG · เลือกหลายไฟล์พร้อมกันได้</div>
               <input ref={fileRef} type="file" accept=".pdf,image/*" multiple style={{display:"none"}} onChange={e=>handleFilesSelected(e.target.files)}/>
             </div>
 
             {/* Manual day add */}
-            <div style={{background:T.card,borderRadius:12,padding:"14px 16px",marginTop:14,boxShadow:`0 1px 6px ${T.shadow}`}}>
-              <div style={{fontWeight:700,color:T.blue,marginBottom:8,fontSize:13}}>⚙️ เพิ่มวันเปล่าด้วยตนเอง</div>
+            <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:14,border:`1px solid ${T.border}`}}>
+              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>เพิ่มวันด้วยตนเอง</div>
               <div style={{display:"flex",gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="วันที่ เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:110,padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:14}}/>
-                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"7px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700}}>+ เพิ่ม</button>
+                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:13}}/>
+                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"6px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>เพิ่ม</button>
               </div>
-              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#0d2040":"#dce8f5",color:T.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
+              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>{cur.days.map(d=><span key={d} style={{background:T.p97Bg,color:T.blue,padding:"3px 8px 3px 10px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${T.border2}`}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.textMute,cursor:"pointer",fontSize:13,padding:0,lineHeight:1,marginTop:-1}}>×</button></span>)}</div>}
             </div>
 
             {/* Restore from CSV Backup */}
-            <div style={{background:T.card,borderRadius:12,padding:"14px 16px",marginTop:14,boxShadow:`0 1px 6px ${T.shadow}`}}>
-              <div style={{fontWeight:700,color:T.green,marginBottom:8,fontSize:13}}>📥 Restore จาก CSV Backup</div>
-              <button onClick={()=>importBackupRef.current?.click()} style={{padding:'8px 16px',background:T.green,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:700}}>📂 เลือกไฟล์ backup CSV</button>
+            <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:10,border:`1px solid ${T.border}`}}>
+              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>Restore จาก Backup</div>
+              <button onClick={()=>importBackupRef.current?.click()} style={{padding:'6px 14px',background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:500}}>เลือกไฟล์ backup CSV</button>
               <input ref={importBackupRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)handleImportBackup(f);e.target.value='';}}/>
             </div>
           </div>}
@@ -489,26 +498,26 @@ export default function App() {
           {/* MONTH TABLE */}
           {subTab==="monthtable"&&<div>
             <div className="no-print" style={{display:"flex",gap:10,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontWeight:800,fontSize:16,color:T.blue}}>ตารางรวมเดือน {mon}</span>
-              <span style={{fontSize:13,color:T.textMute}}>| {cur.days.length} วัน</span>
-              <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+              <span style={{fontWeight:700,fontSize:14,color:T.text,letterSpacing:"0.01em"}}>เดือน{mon}</span>
+              <span style={{fontSize:12,color:T.textFaint,marginLeft:6}}>{cur.days.length} วัน</span>
+              <div style={{marginLeft:"auto",display:"flex",gap:6}}>
                 {cur.days.length>0&&<>
-                  <button onClick={()=>exportCSV(mon,cur.days,cur.table)} style={{padding:"6px 14px",background:T.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>📊 Export CSV</button>
-                  <button onClick={()=>window.print()} style={{padding:"6px 14px",background:T.textMed,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>🖨️ พิมพ์</button>
+                  <button onClick={()=>exportCSV(mon,cur.days,cur.table)} style={{padding:"5px 12px",background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>Export CSV</button>
+                  <button onClick={()=>window.print()} style={{padding:"5px 12px",background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>พิมพ์</button>
                 </>}
               </div>
             </div>
 
             {cur.days.length===0
-              ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📅</div><div>ยังไม่มีข้อมูล — ไปที่แท็บ "📋 นำเข้า"</div></div>
+              ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}><div style={{fontSize:36,marginBottom:12,opacity:0.4}}>📅</div><div style={{fontSize:13}}>ยังไม่มีข้อมูล — ไปที่แท็บ นำเข้า</div></div>
               :<>
-                {cur.history.length>0&&<div className="no-print" style={{background:T.card,borderRadius:10,padding:"12px 16px",marginBottom:14,boxShadow:`0 1px 4px ${T.shadow}`}}>
-                  <div style={{fontSize:12,fontWeight:700,color:T.textMed,marginBottom:8}}>📄 นำเข้าแล้ว — กด 🗑️ เพื่อลบวันนั้น</div>
+                {cur.history.length>0&&<div className="no-print" style={{background:T.card,borderRadius:8,padding:"12px 16px",marginBottom:14,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textFaint,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>นำเข้าแล้ว</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                     {cur.history.map(h=>(
-                      <div key={h.day} style={{background:T.histBg,border:`1px solid ${T.histBdr}`,borderRadius:8,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}>
-                        <div><span style={{fontWeight:700,color:T.green}}>วันที่ {h.day}</span><span style={{color:T.textMute,marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div>
-                        <button onClick={()=>showConfirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`,()=>dropDay(h.day))} style={{border:"none",background:T.msgErrBg,color:T.red,cursor:"pointer",borderRadius:6,padding:"3px 7px",fontSize:13,fontWeight:700}}>🗑️</button>
+                      <div key={h.day} style={{background:T.card2,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}>
+                        <div><span style={{fontWeight:700,color:T.blue}}>วันที่ {h.day}</span><span style={{color:T.textMute,marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div>
+                        <button onClick={()=>showConfirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`,()=>dropDay(h.day))} style={{border:"none",background:"transparent",color:T.textMute,cursor:"pointer",borderRadius:4,padding:"2px 6px",fontSize:12}}>✕</button>
                       </div>
                     ))}
                   </div>
@@ -530,10 +539,10 @@ export default function App() {
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
                   <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue} gold={T.totGold}/>
                   <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green} gold={T.totGold}/>
-                  <div style={{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"12px 14px"}}>
-                    <div style={{fontSize:11,opacity:.7,marginBottom:3}}>ยอดรวมเดือน{mon}</div>
-                    <div style={{fontSize:20,fontWeight:900,color:T.gold}}>{(aSum97+aSum3).toFixed(2)}</div>
-                    <div style={{fontSize:10,opacity:.6,marginTop:2}}>97%: {aSum97.toFixed(2)} | 3%: {aSum3.toFixed(2)}</div>
+                  <div style={{background:isDark?"#0D1117":"#0F172A",color:"#fff",borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
+                    <div style={{fontSize:22,fontWeight:800,color:T.gold,letterSpacing:"-0.02em"}}>{(aSum97+aSum3).toFixed(2)}</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
                   </div>
                 </div>
               </>}
@@ -546,12 +555,12 @@ export default function App() {
 
       {/* Confirm Modal */}
       {confirmDialog&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:T.card,borderRadius:16,padding:'28px 28px',width:'100%',maxWidth:360,boxShadow:`0 8px 40px ${T.shadow2}`}}>
-            <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:20,lineHeight:1.6,whiteSpace:'pre-line'}}>{confirmDialog.message}</div>
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>{confirmDialog.onCancel?.();setConfirmDialog(null);}} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:14}}>ยกเลิก</button>
-              <button onClick={()=>{confirmDialog.onConfirm();setConfirmDialog(null);}} style={{flex:2,padding:10,background:T.red,color:'#fff',border:'none',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontSize:15,fontWeight:800}}>ยืนยัน</button>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:T.card,borderRadius:10,padding:'24px',width:'100%',maxWidth:360,boxShadow:`0 8px 48px ${T.shadow2}`,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:14,fontWeight:500,color:T.text,marginBottom:20,lineHeight:1.7,whiteSpace:'pre-line'}}>{confirmDialog.message}</div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{confirmDialog.onCancel?.();setConfirmDialog(null);}} style={{flex:1,padding:'8px 0',border:`1px solid ${T.border}`,borderRadius:6,background:'transparent',color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
+              <button onClick={()=>{confirmDialog.onConfirm();setConfirmDialog(null);}} style={{flex:2,padding:'8px 0',background:T.red,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:700}}>ยืนยัน</button>
             </div>
           </div>
         </div>
@@ -559,10 +568,10 @@ export default function App() {
 
       {/* Review Modal */}
       {reviewData&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
-          <div style={{background:T.card,borderRadius:16,padding:'24px 24px',width:'100%',maxWidth:600,boxShadow:`0 8px 40px ${T.shadow2}`,maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
-            <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:4}}>🔍 ตรวจสอบข้อมูลที่ Claude อ่าน</div>
-            <div style={{fontSize:13,color:T.textMute,marginBottom:14}}>วันที่ {reviewData.dayStr} เดือน{reviewData.activeMon} — กรุณาตรวจสอบก่อนบันทึก</div>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+          <div style={{background:T.card,borderRadius:10,padding:'24px',width:'100%',maxWidth:600,boxShadow:`0 8px 48px ${T.shadow2}`,maxHeight:'90vh',display:'flex',flexDirection:'column',border:`1px solid ${T.border}`}}>
+            <div style={{fontWeight:700,fontSize:15,color:T.text,marginBottom:3,letterSpacing:"0.01em"}}>ตรวจสอบข้อมูลที่ Claude อ่าน</div>
+            <div style={{fontSize:12,color:T.textMute,marginBottom:14}}>วันที่ {reviewData.dayStr} เดือน{reviewData.activeMon} — กรุณาตรวจสอบก่อนบันทึก</div>
             <div style={{overflowY:'auto',flex:1,marginBottom:16}}>
               <table style={{borderCollapse:'collapse',width:'100%',fontSize:12}}>
                 <thead>
@@ -594,21 +603,21 @@ export default function App() {
               {reviewData.parsed.rows.some(r=>!findOrg(r.matched||r.name))&&<span style={{color:T.red,fontWeight:700}}> · แถวสีแดง = ไม่พบในระบบ (จะไม่ถูกบันทึก)</span>}
               {pdfQueue.length>0&&<span style={{color:T.gold,fontWeight:700,marginLeft:8}}>📂 คิวต่อไป: {pdfQueue.length} ไฟล์</span>}
             </div>
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>{setReviewData(null);setPdfQueue([]);}} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:14}}>❌ ยกเลิก</button>
-              <button onClick={confirmReview} style={{flex:2,padding:10,background:T.blue,color:'#fff',border:'none',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontSize:15,fontWeight:800}}>✅ บันทึก</button>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setReviewData(null);setPdfQueue([]);}} style={{flex:1,padding:'8px 0',border:`1px solid ${T.border}`,borderRadius:6,background:'transparent',color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
+              <button onClick={confirmReview} style={{flex:2,padding:'8px 0',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:700}}>บันทึก</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Mobile bottom nav */}
-      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",boxShadow:`0 -2px 8px ${T.shadow}`}}>
+      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:isDark?"#0D1117":"#0F172A",borderTop:`1px solid ${isDark?"#1A2540":"#1E293B"}`,display:"flex"}}>
         {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
           <button key={id} onClick={id==="backup"?()=>exportBackup(DB,fiscalYear):()=>setMainTab(id)}
-            style={{flex:1,border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0 5px",gap:2,color:mainTab===id&&id!=="backup"?T.blue:T.textMute,fontFamily:"inherit",transition:"color .15s"}}>
-            <span style={{fontSize:22}}>{ico}</span>
-            <span style={{fontSize:9,fontWeight:700}}>{lbl}</span>
+            style={{flex:1,border:"none",borderTop:`2px solid ${mainTab===id&&id!=="backup"?T.gold:"transparent"}`,background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 0 6px",gap:2,color:mainTab===id&&id!=="backup"?"#fff":"rgba(255,255,255,0.45)",fontFamily:"inherit",transition:"color .15s"}}>
+            <span style={{fontSize:20}}>{ico}</span>
+            <span style={{fontSize:9,fontWeight:500,letterSpacing:"0.02em"}}>{lbl}</span>
           </button>
         ))}
       </nav>}

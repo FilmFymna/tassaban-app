@@ -6,11 +6,11 @@ const MTable = React.memo(function MTable({title,list,days,table,setCell,T,sR,sD
   const NW=160, CW=48;
   const hdr97=sG(table,list,days,"p97"), hdr3=sG(table,list,days,"p3");
   return(
-    <div style={{background:T.card,borderRadius:12,overflow:"hidden",boxShadow:`0 2px 8px ${T.shadow}`}}>
-      <div style={{background:col,color:"#fff",padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontWeight:800,fontSize:14}}>{title}</span>
-        <span style={{fontSize:11,opacity:.75,background:"rgba(255,255,255,0.2)",padding:"1px 8px",borderRadius:20}}>97% / 3%</span>
-        <span style={{marginLeft:"auto",fontSize:11,opacity:.85}}>Σ97%: {hdr97.toFixed(2)} | Σ3%: {hdr3.toFixed(2)} | รวม: {(hdr97+hdr3).toFixed(2)}</span>
+    <div style={{background:T.card,borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`}}>
+      <div style={{background:col,color:"#fff",padding:"8px 16px",display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontWeight:700,fontSize:13,letterSpacing:"0.01em"}}>{title}</span>
+        <span style={{fontSize:10,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.12)",padding:"1px 8px",borderRadius:3,letterSpacing:"0.04em"}}>97% / 3%</span>
+        <span style={{marginLeft:"auto",fontSize:11,color:"rgba(255,255,255,0.75)",fontVariantNumeric:"tabular-nums"}}>Σ97%: {hdr97.toFixed(2)} · Σ3%: {hdr3.toFixed(2)} · รวม: {(hdr97+hdr3).toFixed(2)}</span>
       </div>
       <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",fontSize:11.5,tableLayout:"fixed",minWidth:NW+days.length*CW*2+190}}>
