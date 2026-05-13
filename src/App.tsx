@@ -85,6 +85,7 @@ export default function App() {
   // Item 6: pre-loaded result from background API call
   const [pendingResult, setPendingResult] = useState<ExtractResponse | null>(null);
 
+  const [undoAvail,     setUndoAvail]     = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string; onConfirm: () => void; onCancel?: () => void;
   } | null>(null);
@@ -95,6 +96,7 @@ export default function App() {
   const dirty           = useRef<Set<string>>(new Set());
   const undoRef         = useRef<{ mon: string; day: string; data: MonthData } | null>(null);
   const undoTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelledRef    = useRef<boolean>(false);
   const isMobile        = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
@@ -151,7 +153,7 @@ export default function App() {
   }, [DB, ready, fiscalYear]);
 
   const pushDay = useCallback((d: string, mo?: string) => {
-    const n=parseInt(d); if(!n||n<1||n>31) return;
+    const n=parseInt(d); if(isNaN(n)||n<1||n>31) return;
     const s=String(n), month=mo||mon;
     setM(month, c => { if(c.days.includes(s)) return c; return {...c, days:srtDays([...c.days,s]), table:addDayTbl({...c.table},s)}; });
   }, [mon, setM]);
@@ -161,8 +163,9 @@ export default function App() {
       const snapshot = prev[mon];
       if(snapshot) {
         undoRef.current = { mon, day:d, data: JSON.parse(JSON.stringify(snapshot)) };
+        setUndoAvail(true);
         if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        undoTimerRef.current = setTimeout(() => { undoRef.current = null; }, 8000);
+        undoTimerRef.current = setTimeout(() => { undoRef.current = null; setUndoAvail(false); }, 8000);
       }
       const updated = {...prev};
       const c = prev[mon];
@@ -179,6 +182,7 @@ export default function App() {
 
   // Item 6 + 9: handle file pick — starts API call in background, shows day modal
   const startExtract = useCallback(async (file: File) => {
+    cancelledRef.current = false;
     setPendingPdf(file);
     setPendingResult(null);
     // Pre-fill day from filename
@@ -204,10 +208,12 @@ export default function App() {
       try { parsed = await resp.json(); } catch { throw new Error('API ไม่ตอบสนอง — ตรวจสอบว่า API server รันอยู่'); }
       if(!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if(!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
+      if(cancelledRef.current) return;
       setPendingResult(parsed);
       // Item 6: if Claude detected the day, override only if field is still empty
-      if(parsed.document_day && parsed.document_day >= 1 && parsed.document_day <= 31) {
-        setPdfDay(prev => prev === "" ? String(parsed.document_day) : prev);
+      const docDay = parsed.document_day;
+      if(docDay != null && docDay >= 1 && docDay <= 31) {
+        setPdfDay(prev => prev === "" ? String(docDay) : prev);
       }
     } catch(e) {
       setPendingResult(null);
@@ -310,9 +316,15 @@ export default function App() {
       }).filter(r => r.mon && r.day && r.org);
       if(!rows.length) { setMsg({ ok:false, text:'❌ ไม่พบข้อมูลในไฟล์' }); return; }
       const restoredFy = rows[0].fy || fiscalYear;
+      if(restoredFy !== fiscalYear) {
+        setMsg({ok:false, text:`❌ Backup ปี ${restoredFy} ไม่ตรงกับปีปัจจุบัน ${fiscalYear}`});
+        return;
+      }
       setDB(prev => {
         const next: DBState = {...prev};
         rows.forEach(({ mon:rowMon, day, org, p97, p3 }) => {
+          const dayNum = parseInt(day);
+          if(!dayNum || dayNum < 1 || dayNum > 31) return; // skip invalid rows
           if(!next[rowMon]) next[rowMon] = { days:[], table:{}, history:[] };
           const c = next[rowMon];
           if(!c.days.includes(day)) c.days = [...c.days, day].sort((a,b)=>parseInt(a)-parseInt(b));
@@ -337,7 +349,7 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if(e.key === 'Escape') {
-        if(showDayModal) { setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
+        if(showDayModal) { cancelledRef.current = true; setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
         if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
         if(reviewData) setReviewData(null);
         if(msg) setMsg(null);
@@ -400,11 +412,12 @@ export default function App() {
         {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?T.msgOkBg:T.msgErrBg,color:msg.ok?T.msgOkTxt:T.msgErrTxt,border:`1px solid ${msg.ok?T.msgOkBdr:T.msgErrBdr}`}}>
           <span>{msg.text}</span>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {undoRef.current&&(
+            {undoAvail&&(
               <button onClick={()=>{
                 const u=undoRef.current; if(!u) return;
                 setDB(prev=>({...prev,[u.mon]:u.data}));
                 dirty.current.add(u.mon); undoRef.current=null;
+                setUndoAvail(false);
                 if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
                 setMsg({ok:true,text:`↩️ คืนข้อมูลวันที่ ${u.day} แล้ว`});
               }} style={{padding:'2px 10px',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700}}>↩️ Undo</button>
@@ -454,12 +467,12 @@ export default function App() {
                       :<div style={{fontSize:11,color:T.gold,marginBottom:10}}>⏳ รอ Claude อ่าน...</div>
                   }
                   <input type="text" inputMode="numeric" placeholder="เช่น 1, 15, 30" value={pdfDay}
-                    onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setPdfDay(v);}}
+                    onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||( parseInt(v)>=1 && parseInt(v)<=31))setPdfDay(v);}}
                     onKeyDown={e=>{if(e.key==="Enter"&&pdfDay&&pendingResult)handleDaySubmit(String(parseInt(pdfDay)));}}
                     autoFocus
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
+                    <button onClick={()=>{ cancelledRef.current = true; setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
                       <button onClick={()=>{if(pdfDay&&pendingResult&&!pdfLoading)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult||pdfLoading}
                       style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult&&!pdfLoading?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult&&!pdfLoading?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
                       ยืนยัน
@@ -487,7 +500,7 @@ export default function App() {
             <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:14,border:`1px solid ${T.border}`}}>
               <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>เพิ่มวันด้วยตนเอง</div>
               <div style={{display:"flex",gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${isDark?"#2A3F6A":T.border2}`,background:isDark?"#0D1B3E":"#FFFFFF",color:isDark?"#8BA4C4":T.text,fontFamily:"inherit",fontSize:13}}/>
+                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||( parseInt(v)>=1 && parseInt(v)<=31))setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${isDark?"#2A3F6A":T.border2}`,background:isDark?"#0D1B3E":"#FFFFFF",color:isDark?"#8BA4C4":T.text,fontFamily:"inherit",fontSize:13}}/>
                 <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"6px 14px",background:isDark?"#1E5FA8":"#1565C0",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>เพิ่ม</button>
               </div>
               {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#1A2F55":"#E8F0FE",color:isDark?"#7EB3E8":"#1A237E",padding:"3px 8px 3px 10px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${isDark?"#2A4070":"#BFCCF4"}`}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:isDark?"#E05A3A":"#5C6BC0",cursor:"pointer",fontSize:13,padding:0,lineHeight:1,marginTop:-1}}>×</button></span>)}</div>}
@@ -593,7 +606,7 @@ export default function App() {
                     const matched=findOrg(r.matched||r.name);
                     const isUnmatched=!matched;
                     return(
-                      <tr key={i} style={{background:isUnmatched?(isDark?'#2b0d0d':'#fde8e8'):i%2===0?T.card:T.rowAlt}}>
+                      <tr key={i} style={{background:isUnmatched?T.msgErrBg:i%2===0?T.card:T.rowAlt}}>
                         <td style={{padding:'5px 10px',borderBottom:`1px solid ${T.border}`,color:isUnmatched?T.red:T.text,fontWeight:isUnmatched?700:400}}>{r.name}</td>
                         <td style={{padding:'5px 10px',borderBottom:`1px solid ${T.border}`,color:isUnmatched?T.red:T.textMed,fontSize:11}}>{matched||'— ไม่พบ —'}</td>
                         <td style={{padding:'5px 8px',borderBottom:`1px solid ${T.border}`,textAlign:'right',color:T.blue,fontWeight:600}}>{r.p97!=null?String(r.p97):''}</td>

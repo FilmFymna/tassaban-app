@@ -1,7 +1,7 @@
 import type { OrgTable, MonthData, DBState } from '../types';
 import { ALL, TESSABAN, OBT } from '../data/orgs';
 
-export const n2  = (n: number | string): string => { if(n===""||n===null||n===undefined) return ""; const v=parseFloat(String(n)); if(isNaN(v)) return ""; return v%1===0?v.toFixed(0):v.toFixed(2); };
+export const n2  = (n: number | string): string => { if(n===""||n===null||n===undefined) return ""; const v=parseFloat(String(n)); if(isNaN(v)) return ""; return v.toFixed(2); };
 export const fmt = (n: number | null | undefined): string => { if(n===null||n===undefined) return "-"; const v=parseFloat(String(n)); if(isNaN(v)) return "-"; if(v===0) return "0.00"; return v.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); };
 export const sR  = (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3'): number => days.reduce((s,d)=>s+(parseFloat(tbl[org]?.[d]?.[f])||0),0);
 export const sD  = (tbl: OrgTable, day: string, lst: string[], f: 'p97' | 'p3'): number  => lst.reduce((s,o)=>s+(parseFloat(tbl[o]?.[day]?.[f])||0),0);
@@ -9,9 +9,20 @@ export const sG  = (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3
 
 export function findOrg(name: string | null | undefined): string | null {
   if(!name) return null;
-  const nm = (s: string) => s.replace(/\s+/g,"").replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง").replace("อบต.","").replace("อบต","");
-  const n=nm(name);
-  return ALL.find(o=>{ const m=nm(o); return m===n||m.includes(n)||n.includes(m); })||null;
+  const nm = (s: string) => s.replace(/\s+/g,"")
+    .replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง")
+    .replace("อบต.","").replace("อบต","");
+  const n = nm(name);
+  if(!n) return null;
+  // exact match first
+  const exact = ALL.find(o => nm(o) === n);
+  if (exact) return exact;
+  // fallback substring — require min 3 chars, longer string must contain shorter
+  return ALL.find(o => {
+    const m = nm(o);
+    if(m.length < 3 || n.length < 3) return false;
+    return m.length > n.length ? m.includes(n) : n.includes(m);
+  }) || null;
 }
 
 export const initM = (): MonthData => ({ days:[], table:{}, history:[] });

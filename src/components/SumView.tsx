@@ -65,12 +65,12 @@ export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab
               );})}
               <tr style={{background:T.totRow,fontWeight:800}}>
                 <td style={{...td,padding:"8px 10px",color:T.totGold,borderColor:T.borderHeavy}} colSpan={2}>รวมทั้งปี</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:T.borderHeavy}}>{fmt(yr.t97)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",borderColor:T.borderHeavy}}>{fmt(yr.t3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#90caf9",fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.t97+yr.t3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:T.borderHeavy}}>{fmt(yr.o97)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",borderColor:T.borderHeavy}}>{fmt(yr.o3)}</td>
-                <td style={{...td,textAlign:"right",padding:"8px 8px",color:"#a5d6a7",fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.o97+yr.o3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totTxt,borderColor:T.borderHeavy}}>{fmt(yr.t97)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totTxt,borderColor:T.borderHeavy}}>{fmt(yr.t3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totTxt,fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.t97+yr.t3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totGold,borderColor:T.borderHeavy}}>{fmt(yr.o97)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totGold,borderColor:T.borderHeavy}}>{fmt(yr.o3)}</td>
+                <td style={{...td,textAlign:"right",padding:"8px 8px",color:T.totGold,fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.o97+yr.o3)}</td>
                 <td style={{...td,textAlign:"right",padding:"8px 10px",color:T.totGold,fontSize:14,fontWeight:900,borderColor:T.borderHeavy}}>{fmt(yr.t97+yr.t3+yr.o97+yr.o3)}</td>
               </tr>
             </tbody>

@@ -42,7 +42,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'x-api-key': KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
+        ...(isPdf ? {'anthropic-beta':'pdfs-2024-09-25'} : {}),
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
@@ -62,10 +62,13 @@ export default async function handler(req, res) {
     if (!r.ok) { const e = await r.text(); return res.status(502).json({ error: `Anthropic API error ${r.status}: ${e.slice(0, 300)}` }); }
     const data = await r.json();
     const text = data.content?.[0]?.text || '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return res.status(500).json({ error: 'ไม่พบ JSON', raw: text.slice(0, 200) });
+    let jsonStr = null;
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if(start !== -1 && end !== -1 && end > start) jsonStr = text.slice(start, end+1);
+    if (!jsonStr) return res.status(500).json({ error: 'ไม่พบ JSON', raw: text.slice(0, 200) });
     let parsed;
-    try { parsed = JSON.parse(m[0]); } catch (e) { return res.status(500).json({ error: 'JSON parse failed', raw: m[0].slice(0, 200) }); }
+    try { parsed = JSON.parse(jsonStr); } catch (e) { return res.status(500).json({ error: 'JSON parse failed', raw: jsonStr.slice(0, 200) }); }
     return res.status(200).json(parsed);
   } catch (e) { return res.status(500).json({ error: e.message }); }
 }
