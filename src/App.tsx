@@ -364,10 +364,12 @@ export default function App() {
         ::-webkit-scrollbar-track{background:transparent;}
         ::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#CBD5E1"};border-radius:3px;}
         input[type=text]:focus{outline:2px solid ${T.blue};outline-offset:0;}
+        button:hover:not(:disabled){opacity:0.8;transition:opacity .12s;}
+        button:disabled{cursor:default;}
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:isDark?"#0D1117":"#0F172A",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${isDark?"#1A2540":"#1E293B"}`,position:"sticky",top:0,zIndex:100,minHeight:52}}>
+      <header className="no-print" style={{background:"#0D1117",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:"1px solid #1A2540",position:"sticky",top:0,zIndex:100,minHeight:52}}>
         <div style={{display:"flex",alignItems:"center",gap:10,paddingRight:20,borderRight:`1px solid rgba(255,255,255,0.1)`}}>
           <span style={{fontSize:18,lineHeight:1}}>🏛️</span>
           <div style={{minWidth:0}}>
@@ -419,7 +421,7 @@ export default function App() {
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
           <div className="no-print" style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
             {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?T.blue:hasData(m)?T.blue+"55":T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?T.blue:hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":hasData(m)?T.blue:T.textMute,transition:"all .12s"}}>
+              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?T.blue:hasData(m)?"rgba(0,87,168,0.33)":T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?T.blue:hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":hasData(m)?T.blue:T.textMute,transition:"all .12s"}}>
                 {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:6,height:6,background:T.blue,borderRadius:"50%",border:`1.5px solid ${T.bg}`}}/>}
               </button>
             ))}
@@ -455,7 +457,7 @@ export default function App() {
                   <div style={{display:"flex",gap:10}}>
                     <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
                     <button onClick={()=>{if(pdfDay&&pendingResult)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult}
-                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult?T.blue:"#334155",color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
+                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
                       ยืนยัน
                     </button>
                   </div>
@@ -539,7 +541,7 @@ export default function App() {
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
                   <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue} gold={T.totGold}/>
                   <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green} gold={T.totGold}/>
-                  <div style={{background:isDark?"#0D1117":"#0F172A",color:"#fff",borderRadius:8,padding:"12px 14px"}}>
+                  <div style={{background:"#0D1117",color:"#fff",borderRadius:8,padding:"12px 14px"}}>
                     <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
                     <div style={{fontSize:22,fontWeight:800,color:T.gold,letterSpacing:"-0.02em"}}>{(aSum97+aSum3).toFixed(2)}</div>
                     <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
@@ -612,7 +614,7 @@ export default function App() {
       )}
 
       {/* Mobile bottom nav */}
-      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:isDark?"#0D1117":"#0F172A",borderTop:`1px solid ${isDark?"#1A2540":"#1E293B"}`,display:"flex"}}>
+      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"#0D1117",borderTop:"1px solid #1A2540",display:"flex"}}>
         {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
           <button key={id} onClick={id==="backup"?()=>exportBackup(DB,fiscalYear):()=>setMainTab(id)}
             style={{flex:1,border:"none",borderTop:`2px solid ${mainTab===id&&id!=="backup"?T.gold:"transparent"}`,background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 0 6px",gap:2,color:mainTab===id&&id!=="backup"?"#fff":"rgba(255,255,255,0.45)",fontFamily:"inherit",transition:"color .15s"}}>

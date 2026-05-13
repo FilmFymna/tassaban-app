@@ -24,10 +24,10 @@ const MTable = React.memo(function MTable({title,list,days,table,setCell,T,sR,sD
               <th style={{width:NW,padding:"4px 8px",background:T.card3,borderRight:`2px solid ${T.borderHeavy}`}}/>
               {days.map(d=><React.Fragment key={d}>
                 <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:col}}>97%</th>
-                <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888",borderRight:`2px solid ${T.borderHeavy}`}}>3%</th>
+                <th style={{width:CW,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:T.sum3Bg,borderRight:`2px solid ${T.borderHeavy}`}}>3%</th>
               </React.Fragment>)}
               <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:col}}>97%</th>
-              <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888"}}>3%</th>
+              <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:T.sum3Bg}}>3%</th>
               <th style={{width:70,padding:"4px 2px",textAlign:"center",fontWeight:800,fontSize:10,color:T.totTxt,background:T.totBg}}>รวม</th>
             </tr>
           </thead>
