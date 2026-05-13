@@ -1,14 +1,34 @@
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
 
+// ~7.5MB binary → ~10MB base64 (base64 overhead ≈ 33%)
+const MAX_B64_CHARS = 10_000_000;
+
 const ORGS = ["เทศบาลเมืองวารินชำราบ","เทศบาลตำบลห้วยขะยูง","เทศบาลตำบลนาเยีย","เทศบาลตำบลแสนสุข","เทศบาลตำบลเมืองศรีไค","เทศบาลตำบลคำน้ำแซบ","เทศบาลตำบลคำขวาง","เทศบาลตำบลบุ่งไหม","เทศบาลตำบลธาตุ","เทศบาลตำบลบุ่งมะแลง","เทศบาลตำบลท่าช้าง","เทศบาลตำบลสว่าง","เทศบาลตำบลนาเรือง","เทศบาลตำบลนาจาน","เทศบาลตำบลสำโรง","อบต.คูเมือง","อบต.ท่าลาด","อบต.โนนผึ้ง","อบต.โนนโหนน","อบต.บุ่งหวาย","อบต.โพธิ์ใหญ่","อบต.สระสมิง","อบต.หนองกินเพล","อบต.ห้วยขะยุง","อบต.ขามป้อม","อบต.ค้อน้อย","อบต.โคกก่อง","อบต.โคกสว่าง","อบต.โนนกลาง","อบต.โนนกาเล็น","อบต.บอน","อบต.หนองไฮ","อบต.แก่งโดม","อบต.นาดี"];
-const PROMPT = `อ่านข้อมูลจากเอกสารนี้ ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น\nรายชื่อหน่วยงาน:\n${ORGS.join("\n")}\nรูปแบบ: {"rows":[{"name":"ชื่อในเอกสาร","matched":"ชื่อในระบบ","count":0,"p97":0.0,"p3":0.0,"amount":0}],"total_count":0,"total_p97":0.0,"total_p3":0.0,"total_amount":0}`;
+
+const PROMPT = `อ่านข้อมูลจากเอกสารนี้ ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น
+รายชื่อหน่วยงาน:
+${ORGS.join("\n")}
+ถ้าเอกสารระบุวันที่ชัดเจน ให้ใส่เลขวัน (1-31) ใน document_day มิฉะนั้นให้เป็น null
+รูปแบบ: {"rows":[{"name":"ชื่อในเอกสาร","matched":"ชื่อในระบบ","count":0,"p97":0.0,"p3":0.0,"amount":0}],"total_count":0,"total_p97":0.0,"total_p3":0.0,"total_amount":0,"document_day":null}`;
 
 export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const { fileBase64, mimeType } = req.body;
     if (!fileBase64) return res.status(400).json({ error: 'No file' });
-    if (!mimeType) return res.status(400).json({ error: 'No mimeType' });
+    if (!mimeType)   return res.status(400).json({ error: 'No mimeType' });
+
+    // Item 2: file size limit
+    if (fileBase64.length > MAX_B64_CHARS) {
+      return res.status(413).json({ error: 'ไฟล์ใหญ่เกินไป (สูงสุด ~7.5MB)' });
+    }
+
     const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!ALLOWED_TYPES.includes(mimeType)) return res.status(400).json({ error: `Unsupported mimeType: ${mimeType}` });
     const KEY = process.env.ANTHROPIC_KEY;
