@@ -1,7 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const sb = createClient(import.meta.env.VITE_SUPABASE_URL as string, import.meta.env.VITE_SUPABASE_KEY as string);
+const _supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const _supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+if (!_supabaseUrl || !_supabaseKey) {
+  throw new Error('❌ ขาด VITE_SUPABASE_URL หรือ VITE_SUPABASE_KEY ใน .env');
+}
+const sb = createClient(_supabaseUrl, _supabaseKey);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -331,6 +336,34 @@ function useIsMobile(): boolean {
   return m;
 }
 
+// ─── ErrorBoundary ────────────────────────────────────────────────────────────
+
+export class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16,background:'#f2f5f8',fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",padding:24}}>
+          <div style={{fontSize:48}}>⚠️</div>
+          <div style={{fontSize:20,fontWeight:800,color:'#c0392b'}}>เกิดข้อผิดพลาด</div>
+          <div style={{fontSize:13,color:'#555',maxWidth:480,textAlign:'center',wordBreak:'break-all'}}>{this.state.error.message}</div>
+          <button onClick={()=>window.location.reload()} style={{padding:'10px 24px',background:'#0f4c81',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontSize:15,fontWeight:700}}>โหลดหน้าใหม่</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -348,9 +381,22 @@ export default function App() {
   const [showDayModal,  setShowDayModal]  = useState(false);
   const [pendingPdf,    setPendingPdf]    = useState<File | null>(null);
   const [pdfDay,        setPdfDay]        = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  } | null>(null);
+  const [reviewData, setReviewData] = useState<{ parsed: ExtractResponse; dayStr: string; activeMon: string } | null>(null);
   const fileRef  = useRef<HTMLInputElement>(null);
   const dirty    = useRef<Set<string>>(new Set());
   const isMobile = useIsMobile();
+
+  // Undo refs
+  const undoRef      = useRef<{ mon: string; day: string; data: MonthData } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Restore backup ref
+  const importBackupRef = useRef<HTMLInputElement>(null);
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
 
@@ -367,6 +413,11 @@ export default function App() {
     setDB(prev=>{ const c=prev[m]||initM(); return {...prev,[m]:fn(c)}; });
     dirty.current.add(m);
   },[]);
+
+  // showConfirm helper
+  const showConfirm = useCallback((message: string, onConfirm: () => void) => {
+    setConfirmDialog({ message, onConfirm });
+  }, []);
 
   useEffect(()=>{
     setReady(false); setDB({});
@@ -406,9 +457,30 @@ export default function App() {
     setM(month,c=>{ if(c.days.includes(s)) return c; return {...c,days:srtDays([...c.days,s]),table:addDayTbl({...c.table},s)}; });
   },[mon,setM]);
 
+  // dropDay with undo snapshot
   const dropDay = useCallback((d: string)=>{
-    setM(mon,c=>({...c,days:c.days.filter(x=>x!==d),table:rmDayTbl({...c.table},d),history:c.history.filter(h=>h.day!==d)}));
-  },[mon,setM]);
+    setDB(prev => {
+      const snapshot = prev[mon];
+      if (snapshot) {
+        undoRef.current = { mon, day: d, data: JSON.parse(JSON.stringify(snapshot)) };
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = setTimeout(() => { undoRef.current = null; }, 8000);
+      }
+      const updated = { ...prev };
+      const c = prev[mon];
+      if (c) {
+        updated[mon] = {
+          ...c,
+          days: c.days.filter((x: string) => x !== d),
+          table: rmDayTbl({ ...c.table }, d),
+          history: c.history.filter((h: HistoryEntry) => h.day !== d)
+        };
+      }
+      return updated;
+    });
+    dirty.current.add(mon);
+    setMsg({ ok: true, text: `🗑️ ลบวันที่ ${d} แล้ว` });
+  },[mon]);
 
   const setCell = useCallback((org: string, day: string, f: 'p97' | 'p3', v: string)=>{
     setM(mon,c=>({...c,table:{...c.table,[org]:{...c.table[org],[day]:{...c.table[org]?.[day],[f]:v}}}}));
@@ -446,26 +518,22 @@ export default function App() {
       if (!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
 
       if (getM(activeMon).history.find(h=>h.day===dayStr)) {
-        if (!window.confirm(`⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`)) { return; }
+        let userCancelled = false;
+        await new Promise<void>((resolve, reject) => {
+          setConfirmDialog({
+            message: `⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`,
+            onConfirm: resolve,
+            onCancel: reject,
+          });
+        }).catch(() => { userCancelled = true; });
+        if (userCancelled) return;
+        // If we reach here the user confirmed — proceed
       }
 
-      setM(activeMon, c => {
-        const nd = c.days.includes(dayStr) ? c.days : srtDays([...c.days, dayStr]);
-        const nt = addDayTbl({...c.table}, dayStr);
-        parsed.rows.forEach(r => {
-          const f = findOrg(r.matched || r.name);
-          // Use nullish check so that a value of 0 is still stored correctly
-          if (f && (r.p97 != null || r.p3 != null)) nt[f][dayStr] = {p97: r.p97!=null?String(r.p97):"", p3: r.p3!=null?String(r.p3):""};
-        });
-        const nh = [...c.history.filter(h=>h.day!==dayStr),
-          {day:dayStr, total_p97:parsed.total_p97||0, total_p3:parsed.total_p3||0, total_amount:parsed.total_amount||0}
-        ].sort((a,b)=>parseInt(a.day)-parseInt(b.day));
-        return {...c, days:nd, table:nt, history:nh};
-      });
-
-      const matched = parsed.rows.filter(r=>findOrg(r.matched||r.name)).length;
-      setMsg({ok:true, text:`✅ Claude อ่านสำเร็จ! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
-      setSubTab("monthtable");
+      // Show review modal instead of saving immediately
+      setPdfLoading(false);
+      setMsg({ok:true, text:`✅ Claude อ่านสำเร็จ! กรุณาตรวจสอบข้อมูลก่อนบันทึก`});
+      setReviewData({ parsed, dayStr, activeMon });
     } catch(e) {
       setMsg({ok:false, text:`❌ ${(e as Error).message}`});
     } finally {
@@ -473,10 +541,85 @@ export default function App() {
     }
   };
 
+  const handleImportBackup = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      const lines = text.replace(/^﻿/, '').split('\n').filter(l => l.trim());
+      const rows = lines.slice(1).map(line => {
+        const cols = line.match(/"([^"]*)"/g)?.map(c => c.slice(1,-1)) || [];
+        return { fy: cols[0], mon: cols[1], day: cols[2], org: cols[3], p97: cols[4]||'', p3: cols[5]||'' };
+      }).filter(r => r.mon && r.day && r.org);
+
+      if (!rows.length) { setMsg({ ok: false, text: '❌ ไม่พบข้อมูลในไฟล์' }); return; }
+
+      const restoredFy = rows[0].fy || fiscalYear;
+      setDB(prev => {
+        const next: DBState = { ...prev };
+        rows.forEach(({ mon: rowMon, day, org, p97, p3 }) => {
+          if (!next[rowMon]) next[rowMon] = { days: [], table: {}, history: [] };
+          const c = next[rowMon];
+          if (!c.days.includes(day)) {
+            c.days = [...c.days, day].sort((a,b) => parseInt(a)-parseInt(b));
+          }
+          ALL.forEach(o => { if (!c.table[o]) c.table[o] = {}; if (!c.table[o][day]) c.table[o][day] = {p97:'',p3:''}; });
+          if (c.table[org]?.[day] !== undefined) c.table[org][day] = { p97, p3 };
+          dirty.current.add(rowMon);
+        });
+        return next;
+      });
+
+      setMsg({ ok: true, text: `✅ Restore สำเร็จ! ${rows.length} แถว (ปี ${restoredFy})` });
+    } catch(e) {
+      setMsg({ ok: false, text: `❌ อ่านไฟล์ไม่ได้: ${(e as Error).message}` });
+    }
+  }, [fiscalYear]);
+
   const mSum = useCallback((m: string): MonthSummary =>{
     const {days,table}=getM(m);
     return{t97:sG(table,TESSABAN,days,"p97"),t3:sG(table,TESSABAN,days,"p3"),o97:sG(table,OBT,days,"p97"),o3:sG(table,OBT,days,"p3"),days:days.length};
   },[getM]);
+
+  const confirmReview = useCallback(() => {
+    if (!reviewData) return;
+    const { parsed, dayStr, activeMon } = reviewData;
+    setM(activeMon, c => {
+      const nd = c.days.includes(dayStr) ? c.days : srtDays([...c.days, dayStr]);
+      const nt = addDayTbl({...c.table}, dayStr);
+      parsed.rows.forEach(r => {
+        const f = findOrg(r.matched || r.name);
+        if (f && (r.p97 != null || r.p3 != null)) nt[f][dayStr] = {p97: r.p97!=null?String(r.p97):"", p3: r.p3!=null?String(r.p3):""};
+      });
+      const nh = [...c.history.filter(h=>h.day!==dayStr),
+        {day:dayStr, total_p97:parsed.total_p97||0, total_p3:parsed.total_p3||0, total_amount:parsed.total_amount||0}
+      ].sort((a,b)=>parseInt(a.day)-parseInt(b.day));
+      return {...c, days:nd, table:nt, history:nh};
+    });
+    const matched = parsed.rows.filter(r=>findOrg(r.matched||r.name)).length;
+    setMsg({ok:true, text:`✅ บันทึกแล้ว! วันที่ ${dayStr}: จับคู่ได้ ${matched}/${parsed.rows.length} รายการ`});
+    setSubTab("monthtable");
+    setReviewData(null);
+  }, [reviewData, setM]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDayModal) setShowDayModal(false);
+        if (confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
+        if (reviewData) setReviewData(null);
+        if (msg) setMsg(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showDayModal, confirmDialog, reviewData, msg]);
+
+  const tSum97 = sG(cur.table, TESSABAN, cur.days, "p97");
+  const tSum3  = sG(cur.table, TESSABAN, cur.days, "p3");
+  const oSum97 = sG(cur.table, OBT,      cur.days, "p97");
+  const oSum3  = sG(cur.table, OBT,      cur.days, "p3");
+  const aSum97 = tSum97 + oSum97;
+  const aSum3  = tSum3  + oSum3;
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:"'Noto Sans Thai','Sarabun',sans-serif",transition:"background .2s",paddingBottom:isMobile?64:0}}>
@@ -501,7 +644,7 @@ export default function App() {
         {saving&&<div style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:saving==="saved"?"rgba(26,122,74,0.9)":saving==="error"?"rgba(192,57,43,0.9)":"rgba(255,255,255,0.2)",color:"#fff",whiteSpace:"nowrap"}}>{saving==="saving"?"💾...":saving==="saved"?"✅":"❌"}</div>}
         <select value={fiscalYear} onChange={e=>{ setFiscalYear(e.target.value); setMon("ตุลาคม"); }}
           style={{padding:"4px 6px",borderRadius:8,border:"none",fontFamily:"inherit",fontSize:11,fontWeight:700,background:"rgba(255,255,255,0.15)",color:"#fff",cursor:"pointer"}}>
-          {[2566,2567,2568,2569,2570].map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
+          {Array.from({ length: 6 }, (_, i) => parseInt(fiscalYear) - 3 + i).map(y=><option key={y} value={String(y)} style={{color:"#000"}}>ปี {y}</option>)}
         </select>
         {!isMobile&&<div style={{display:"flex",gap:5,alignItems:"center"}}>
           {[["monthly","📅 รายเดือน"],["summary","📊 รายปี"],["chart","📈 กราฟ"]].map(([id,lbl])=>(
@@ -515,7 +658,26 @@ export default function App() {
       {!ready&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",gap:16}}><div style={{fontSize:42}}>⏳</div><div style={{fontSize:16,color:T.textMute,fontWeight:600}}>กำลังโหลดข้อมูล...</div></div>}
 
       {ready&&<>
-        {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?T.msgOkBg:T.msgErrBg,color:msg.ok?T.msgOkTxt:T.msgErrTxt,border:`1px solid ${msg.ok?T.msgOkBdr:T.msgErrBdr}`}}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5,color:msg.ok?T.msgOkTxt:T.msgErrTxt}}>×</button></div>}
+        {/* Msg bar with Undo button */}
+        {msg&&<div className="no-print" style={{margin:"10px 16px 0",padding:"9px 14px",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center",background:msg.ok?T.msgOkBg:T.msgErrBg,color:msg.ok?T.msgOkTxt:T.msgErrTxt,border:`1px solid ${msg.ok?T.msgOkBdr:T.msgErrBdr}`}}>
+          <span>{msg.text}</span>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {undoRef.current && (
+              <button onClick={() => {
+                const u = undoRef.current;
+                if (!u) return;
+                setDB(prev => ({ ...prev, [u.mon]: u.data }));
+                dirty.current.add(u.mon);
+                undoRef.current = null;
+                if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+                setMsg({ ok: true, text: `↩️ คืนข้อมูลวันที่ ${u.day} แล้ว` });
+              }} style={{padding:'2px 10px',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700}}>
+                ↩️ Undo
+              </button>
+            )}
+            <button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5,color:msg.ok?T.msgOkTxt:T.msgErrTxt}}>×</button>
+          </div>
+        </div>}
 
         {/* MONTHLY */}
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
@@ -581,6 +743,17 @@ export default function App() {
               </div>
               {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#162035":"#e8f0fe",color:T.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
             </div>
+
+            {/* Restore from CSV Backup */}
+            <div style={{background:T.card,borderRadius:12,padding:"14px 16px",marginTop:14,boxShadow:`0 1px 6px ${T.shadow}`}}>
+              <div style={{fontWeight:700,color:T.green,marginBottom:8,fontSize:13}}>📥 Restore จาก CSV Backup</div>
+              <button onClick={()=>importBackupRef.current?.click()}
+                style={{padding:'8px 16px',background:T.green,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:700}}>
+                📂 เลือกไฟล์ backup CSV
+              </button>
+              <input ref={importBackupRef} type="file" accept=".csv" style={{display:'none'}}
+                onChange={e=>{const f=e.target.files?.[0];if(f)handleImportBackup(f);e.target.value='';}}/>
+            </div>
           </div>}
 
           {/* MONTH TABLE */}
@@ -590,7 +763,7 @@ export default function App() {
               <span style={{fontSize:13,color:T.textMute}}>| {cur.days.length} วัน</span>
               <div style={{marginLeft:"auto",display:"flex",gap:8}}>
                 {cur.days.length>0&&<>
-                  <button onClick={()=>exportExcel(mon,cur.days,cur.table)} style={{padding:"6px 14px",background:T.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>📊 Export Excel</button>
+                  <button onClick={()=>exportExcel(mon,cur.days,cur.table)} style={{padding:"6px 14px",background:T.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>📊 Export CSV</button>
                   <button onClick={()=>window.print()} style={{padding:"6px 14px",background:T.textMed,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700}}>🖨️ พิมพ์</button>
                 </>}
               </div>
@@ -599,7 +772,8 @@ export default function App() {
             {cur.days.length===0
               ?<div style={{textAlign:"center",padding:60,color:T.textFaint,background:T.card,borderRadius:12}}><div style={{fontSize:44,marginBottom:10}}>📅</div><div>ยังไม่มีข้อมูล — ไปที่แท็บ "📋 นำเข้า"</div></div>
               :<>
-                {cur.history.length>0&&<div className="no-print" style={{background:T.card,borderRadius:10,padding:"12px 16px",marginBottom:14,boxShadow:`0 1px 4px ${T.shadow}`}}><div style={{fontSize:12,fontWeight:700,color:T.textMed,marginBottom:8}}>📄 นำเข้าแล้ว — กด 🗑️ เพื่อลบวันนั้น</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cur.history.map(h=><div key={h.day} style={{background:T.histBg,border:`1px solid ${T.histBdr}`,borderRadius:8,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}><div><span style={{fontWeight:700,color:T.green}}>วันที่ {h.day}</span><span style={{color:T.textMute,marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div><button onClick={()=>{ if(window.confirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`)) dropDay(h.day); }} style={{border:"none",background:T.msgErrBg,color:T.red,cursor:"pointer",borderRadius:6,padding:"3px 7px",fontSize:13,fontWeight:700}}>🗑️</button></div>)}</div></div>}
+                {cur.history.length>0&&<div className="no-print" style={{background:T.card,borderRadius:10,padding:"12px 16px",marginBottom:14,boxShadow:`0 1px 4px ${T.shadow}`}}><div style={{fontSize:12,fontWeight:700,color:T.textMed,marginBottom:8}}>📄 นำเข้าแล้ว — กด 🗑️ เพื่อลบวันนั้น</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cur.history.map(h=><div key={h.day} style={{background:T.histBg,border:`1px solid ${T.histBdr}`,borderRadius:8,padding:"5px 12px",fontSize:12,display:"flex",alignItems:"center",gap:10}}><div><span style={{fontWeight:700,color:T.green}}>วันที่ {h.day}</span><span style={{color:T.textMute,marginLeft:8}}>97%: {(h.total_p97||0).toFixed(2)} | 3%: {(h.total_p3||0).toFixed(2)} | รวม: {(h.total_amount||0).toFixed(2)}</span></div>
+                  <button onClick={()=>showConfirm(`ลบข้อมูลวันที่ ${h.day} เดือน${mon}?`, ()=>dropDay(h.day))} style={{border:"none",background:T.msgErrBg,color:T.red,cursor:"pointer",borderRadius:6,padding:"3px 7px",fontSize:13,fontWeight:700}}>🗑️</button></div>)}</div></div>}
 
                 <div className="print-only" style={{marginBottom:20,borderBottom:"2px solid #0f4c81",paddingBottom:12}}>
                   <div style={{textAlign:"center",fontSize:16,fontWeight:800,color:"#0f4c81",marginBottom:4}}>รายงานยอดเงินอุดหนุนรายวัน</div>
@@ -615,12 +789,12 @@ export default function App() {
                 <div style={{height:16}}/>
                 <MTable title="อบต." list={OBT} days={cur.days} table={cur.table} setCell={setCell} T={T} sR={sR} sD={sD} sG={sG} n2={n2}/>
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
-                  <SCard label="รวมเทศบาล" p97={sG(cur.table,TESSABAN,cur.days,"p97")} p3={sG(cur.table,TESSABAN,cur.days,"p3")} color={T.blue}/>
-                  <SCard label="รวม อบต." p97={sG(cur.table,OBT,cur.days,"p97")} p3={sG(cur.table,OBT,cur.days,"p3")} color={T.green}/>
+                  <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue}/>
+                  <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green}/>
                   <div style={{background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"12px 14px"}}>
                     <div style={{fontSize:11,opacity:.7,marginBottom:3}}>ยอดรวมเดือน{mon}</div>
-                    <div style={{fontSize:20,fontWeight:900,color:T.gold}}>{(sG(cur.table,ALL,cur.days,"p97")+sG(cur.table,ALL,cur.days,"p3")).toFixed(2)}</div>
-                    <div style={{fontSize:10,opacity:.6,marginTop:2}}>97%: {sG(cur.table,ALL,cur.days,"p97").toFixed(2)} | 3%: {sG(cur.table,ALL,cur.days,"p3").toFixed(2)}</div>
+                    <div style={{fontSize:20,fontWeight:900,color:T.gold}}>{(aSum97+aSum3).toFixed(2)}</div>
+                    <div style={{fontSize:10,opacity:.6,marginTop:2}}>97%: {aSum97.toFixed(2)} | 3%: {aSum3.toFixed(2)}</div>
                   </div>
                 </div>
               </>}
@@ -634,6 +808,63 @@ export default function App() {
         {/* CHART */}
         {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} getM={getM} T={T} fmt={fmt} sR={sR} sG={sG} isMobile={isMobile}/>}
       </>}
+
+      {/* Confirm Modal */}
+      {confirmDialog && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:T.card,borderRadius:16,padding:'28px 28px',width:'100%',maxWidth:360,boxShadow:`0 8px 40px ${T.shadow2}`}}>
+            <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:20,lineHeight:1.6,whiteSpace:'pre-line'}}>{confirmDialog.message}</div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>{ confirmDialog.onCancel?.(); setConfirmDialog(null); }} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:14}}>ยกเลิก</button>
+              <button onClick={()=>{confirmDialog.onConfirm();setConfirmDialog(null);}} style={{flex:2,padding:10,background:T.red,color:'#fff',border:'none',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontSize:15,fontWeight:800}}>ยืนยัน</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {reviewData && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+          <div style={{background:T.card,borderRadius:16,padding:'24px 24px',width:'100%',maxWidth:600,boxShadow:`0 8px 40px ${T.shadow2}`,maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
+            <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:4}}>🔍 ตรวจสอบข้อมูลที่ Claude อ่าน</div>
+            <div style={{fontSize:13,color:T.textMute,marginBottom:14}}>วันที่ {reviewData.dayStr} เดือน{reviewData.activeMon} — กรุณาตรวจสอบก่อนบันทึก</div>
+            <div style={{overflowY:'auto',flex:1,marginBottom:16}}>
+              <table style={{borderCollapse:'collapse',width:'100%',fontSize:12}}>
+                <thead>
+                  <tr style={{background:T.card3}}>
+                    <th style={{padding:'6px 10px',textAlign:'left',fontWeight:700,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`}}>ชื่อในเอกสาร</th>
+                    <th style={{padding:'6px 10px',textAlign:'left',fontWeight:700,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`}}>จับคู่กับ</th>
+                    <th style={{padding:'6px 8px',textAlign:'right',fontWeight:700,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`}}>97%</th>
+                    <th style={{padding:'6px 8px',textAlign:'right',fontWeight:700,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`}}>3%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewData.parsed.rows.map((r, i) => {
+                    const matched = findOrg(r.matched || r.name);
+                    const isUnmatched = !matched;
+                    return (
+                      <tr key={i} style={{background:isUnmatched?(isDark?'#2b0d0d':'#fde8e8'):i%2===0?T.card:T.rowAlt}}>
+                        <td style={{padding:'5px 10px',borderBottom:`1px solid ${T.border}`,color:isUnmatched?T.red:T.text,fontWeight:isUnmatched?700:400}}>{r.name}</td>
+                        <td style={{padding:'5px 10px',borderBottom:`1px solid ${T.border}`,color:isUnmatched?T.red:T.textMed,fontSize:11}}>{matched || '— ไม่พบ —'}</td>
+                        <td style={{padding:'5px 8px',borderBottom:`1px solid ${T.border}`,textAlign:'right',color:T.blue,fontWeight:600}}>{r.p97 != null ? String(r.p97) : ''}</td>
+                        <td style={{padding:'5px 8px',borderBottom:`1px solid ${T.border}`,textAlign:'right',color:T.textMute}}>{r.p3 != null ? String(r.p3) : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{fontSize:12,color:T.textMute,marginBottom:14}}>
+              จับคู่ได้ {reviewData.parsed.rows.filter(r=>findOrg(r.matched||r.name)).length}/{reviewData.parsed.rows.length} รายการ
+              {reviewData.parsed.rows.some(r=>!findOrg(r.matched||r.name)) && <span style={{color:T.red,fontWeight:700}}> · แถวสีแดง = ไม่พบในระบบ (จะไม่ถูกบันทึก)</span>}
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setReviewData(null)} style={{flex:1,padding:10,border:`1px solid ${T.border}`,borderRadius:10,background:T.card2,color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:14}}>❌ ยกเลิก</button>
+              <button onClick={confirmReview} style={{flex:2,padding:10,background:T.blue,color:'#fff',border:'none',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontSize:15,fontWeight:800}}>✅ บันทึก</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile bottom nav */}
       {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",boxShadow:`0 -2px 8px ${T.shadow}`}}>
