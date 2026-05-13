@@ -185,32 +185,32 @@ const currentFiscalYear = (): string => {
 };
 
 const mkTheme = (dark: boolean): Theme => ({
-  blue:  "#0f4c81",
-  green: "#1a7a4a",
-  gold:  "#e8a020",
+  blue:  "#0057A8",           // Pantone 2945 C
+  green: "#3a7cbf",           // muted blue-steel for OBT sections
+  gold:  "#FFA300",           // Pantone 137 C
   red:   "#c0392b",
-  bg:        dark ? "#0f1117" : "#f2f5f8",
-  card:      dark ? "#1a1d23" : "#ffffff",
-  card2:     dark ? "#212530" : "#f8f9fa",
-  card3:     dark ? "#1e2230" : "#f1f5f9",
-  border:    dark ? "#2d3340" : "#e2e8f0",
-  border2:   dark ? "#3a404d" : "#d0d5dd",
-  borderHeavy: dark ? "#4a5568" : "#aac4e0",
+  bg:        dark ? "#0a0e18" : "#f0f3f7",
+  card:      dark ? "#111827" : "#ffffff",
+  card2:     dark ? "#161e2e" : "#f5f7fa",
+  card3:     dark ? "#1a2236" : "#eef1f6",
+  border:    dark ? "#253050" : "#dce2ea",
+  border2:   dark ? "#2f3d5a" : "#c8d0db",
+  borderHeavy: dark ? "#3d5070" : "#A2AAAD",  // Pantone 421 C
   text:      dark ? "#e2e8f0" : "#1a2744",
   textMed:   dark ? "#94a3b8" : "#555",
   textMute:  dark ? "#64748b" : "#888",
   textFaint: dark ? "#475569" : "#aaa",
-  rowAlt:    dark ? "#161922" : "#fafbfc",
+  rowAlt:    dark ? "#0d1221" : "#fafbfc",
   shadow:    dark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.07)",
   shadow2:   dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.2)",
-  p97Bg:     dark ? "#1e3a5f" : "#f0f6ff",
-  p97Sum:    dark ? "#162035" : "#eff6ff",
-  p3Bg:      dark ? "#252830" : "#f9f9f9",
-  p3Sum:     dark ? "#1c1e22" : "#f3f3f3",
-  p97Num:    dark ? "#7eb8f7" : undefined,
-  p3Num:     dark ? "#94a3b8" : undefined,
+  p97Bg:     dark ? "#0d2040" : "#e8f0fb",    // blue tint
+  p97Sum:    dark ? "#091530" : "#d8e8f5",
+  p3Bg:      dark ? "#2a1800" : "#fff5e6",    // orange tint
+  p3Sum:     dark ? "#1f1000" : "#ffe8c0",
+  p97Num:    dark ? "#6ab0f5" : undefined,
+  p3Num:     dark ? "#ffb840" : undefined,
   numColor:  dark ? "#e2e8f0" : undefined,
-  totRow:    dark ? "#0a0c10" : "#1a1a2e",
+  totRow:    dark ? "#0a0c10" : "#1a2744",
   msgOkBg:   dark ? "#0d2b1a" : "#e6f9ee",
   msgOkTxt:  dark ? "#4ade80" : "#1a6b38",
   msgOkBdr:  dark ? "#166534" : "#9de0b6",
@@ -220,8 +220,8 @@ const mkTheme = (dark: boolean): Theme => ({
   tblHeadTxt:dark ? "#94a3b8" : "#4a5568",
   histBg:    dark ? "#0d2b1a" : "#f0fdf4",
   histBdr:   dark ? "#166534" : "#86efac",
-  totBg:     dark ? "#1e3a5f" : "#dbeafe",
-  totTxt:    dark ? "#93c5fd" : "#1e3a5f",
+  totBg:     dark ? "#0d2040" : "#cce0f5",
+  totTxt:    dark ? "#6ab0f5" : "#0057A8",
 });
 
 const initM = (): MonthData => ({ days:[], table:{}, history:[] });
@@ -639,7 +639,7 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#1a6bb5)`,color:"#fff",padding:"0 12px",display:"flex",alignItems:"center",gap:8,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
+      <header className="no-print" style={{background:`linear-gradient(135deg,${T.blue},#0080CF)`,color:"#fff",padding:"0 12px",display:"flex",alignItems:"center",gap:8,boxShadow:`0 3px 12px ${T.shadow2}`,position:"sticky",top:0,zIndex:100,minHeight:54}}>
         <span style={{fontSize:20}}>🏛️</span>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:800,fontSize:isMobile?12:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>ระบบบันทึกยอดรายวัน เทศบาล / อบต.</div>
@@ -687,7 +687,7 @@ export default function App() {
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
           <div className="no-print" style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
             {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?T.blue:hasData(m)?isDark?"#0d2b1a":"#d1fae5":isDark?T.card2:"#e2e8f0",color:mon===m?"#fff":hasData(m)?T.green:T.textMed}}>
+              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,position:"relative",background:mon===m?T.blue:hasData(m)?isDark?"#0d2040":"#dce8f5":isDark?T.card2:"#e2e8f0",color:mon===m?"#fff":hasData(m)?T.green:T.textMed}}>
                 {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:T.green,borderRadius:"50%",border:"1.5px solid #fff"}}/>}
               </button>
             ))}
@@ -745,7 +745,7 @@ export default function App() {
                 <input type="text" inputMode="numeric" placeholder="วันที่ เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:110,padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:14}}/>
                 <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"7px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700}}>+ เพิ่ม</button>
               </div>
-              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#162035":"#e8f0fe",color:T.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
+              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#0d2040":"#dce8f5",color:T.blue,padding:"3px 10px 3px 12px",borderRadius:20,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button></span>)}</div>}
             </div>
 
             {/* Restore from CSV Backup */}
