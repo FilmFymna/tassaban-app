@@ -369,12 +369,12 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:isDark?"#0D1B3E":"#1565C0",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:isDark?"1px solid #1E3256":"none",position:"sticky",top:0,zIndex:100,minHeight:52}}>
+      <header className="no-print" style={{background:isDark?"#0D1B3E":"linear-gradient(to right, #1565C0, #1976D2)",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:isDark?"1px solid #1E3256":"none",position:"sticky",top:0,zIndex:100,minHeight:52}}>
         <div style={{display:"flex",alignItems:"center",gap:10,paddingRight:20,borderRight:`1px solid rgba(255,255,255,0.1)`}}>
           <span style={{fontSize:18,lineHeight:1}}>🏛️</span>
           <div style={{minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:isMobile?11:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:"0.01em"}}>เทศบาล / อบต. วารินชำราบ</div>
-            {!isMobile&&<div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:1}}>ปีงบประมาณ {fiscalYear}</div>}
+            <div style={{fontWeight:600,fontSize:isMobile?12:15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:"#FFFFFF"}}>เทศบาล / อบต. วารินชำราบ</div>
+            {!isMobile&&<div style={{fontSize:12,fontWeight:400,color:"#BBDEFB",marginTop:1}}>ปีงบประมาณ {fiscalYear}</div>}
           </div>
         </div>
         {!isMobile&&<div style={{display:"flex",alignItems:"center",flex:1,marginLeft:12,gap:6}}>
