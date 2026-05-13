@@ -369,7 +369,7 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <header className="no-print" style={{background:"#0D1117",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:"1px solid #1A2540",position:"sticky",top:0,zIndex:100,minHeight:52}}>
+      <header className="no-print" style={{background:isDark?"#0D1117":"#1565C0",color:"#fff",padding:"0 16px",display:"flex",alignItems:"center",gap:0,borderBottom:isDark?"1px solid #1A2540":"none",position:"sticky",top:0,zIndex:100,minHeight:52}}>
         <div style={{display:"flex",alignItems:"center",gap:10,paddingRight:20,borderRight:`1px solid rgba(255,255,255,0.1)`}}>
           <span style={{fontSize:18,lineHeight:1}}>🏛️</span>
           <div style={{minWidth:0}}>
@@ -377,9 +377,11 @@ export default function App() {
             {!isMobile&&<div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:1}}>ปีงบประมาณ {fiscalYear}</div>}
           </div>
         </div>
-        {!isMobile&&<div style={{display:"flex",alignItems:"stretch",flex:1,marginLeft:4}}>
+        {!isMobile&&<div style={{display:"flex",alignItems:isDark?"stretch":"center",flex:1,marginLeft:isDark?4:12,gap:isDark?0:6}}>
           {[["monthly","รายเดือน"],["summary","รายปี"],["chart","กราฟ"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"0 14px",height:52,border:"none",borderBottom:`2px solid ${mainTab===id?T.gold:"transparent"}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:400,background:"transparent",color:mainTab===id?"#fff":"rgba(255,255,255,0.5)",transition:"color .15s,border-color .15s"}}>{lbl}</button>
+            isDark
+              ? <button key={id} onClick={()=>setMainTab(id)} style={{padding:"0 14px",height:52,border:"none",borderBottom:`2px solid ${mainTab===id?T.gold:"transparent"}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:400,background:"transparent",color:mainTab===id?"#fff":"rgba(255,255,255,0.5)",transition:"color .15s,border-color .15s"}}>{lbl}</button>
+              : <button key={id} onClick={()=>setMainTab(id)} style={{padding:"5px 14px",border:mainTab===id?"none":"1px solid rgba(255,255,255,0.5)",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:500,background:mainTab===id?"#F59E0B":"#1E88E5",color:"#fff",transition:"all .15s"}}>{lbl}</button>
           ))}
         </div>}
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
@@ -421,17 +423,24 @@ export default function App() {
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
           <div className="no-print" style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
             {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?T.blue:hasData(m)?"rgba(0,87,168,0.33)":T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?T.blue:hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":hasData(m)?T.blue:T.textMute,transition:"all .12s"}}>
-                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:6,height:6,background:T.blue,borderRadius:"50%",border:`1.5px solid ${T.bg}`}}/>}
+              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?T.blue:hasData(m)?(isDark?"rgba(0,87,168,0.33)":"rgba(21,101,192,0.3)"):T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?T.blue:hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":T.blue,transition:"all .12s"}}>
+                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:6,height:6,background:isDark?T.blue:"#1E88E5",borderRadius:"50%",border:`1.5px solid ${T.bg}`}}/>}
               </button>
             ))}
           </div>
 
-          <div className="no-print" style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:16,gap:0}}>
-            {[["import","นำเข้า"],["monthtable","ตารางเดือน"]].map(([id,lbl])=>(
-              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 16px",border:"none",borderBottom:`2px solid ${subTab===id?T.blue:"transparent"}`,marginBottom:-1,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:subTab===id?700:400,background:"transparent",color:subTab===id?T.blue:T.textMute,transition:"color .12s,border-color .12s"}}>{lbl}</button>
-            ))}
-          </div>
+          {isDark
+            ? <div className="no-print" style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:16,gap:0}}>
+                {[["import","นำเข้า"],["monthtable","ตารางเดือน"]].map(([id,lbl])=>(
+                  <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 16px",border:"none",borderBottom:`2px solid ${subTab===id?T.blue:"transparent"}`,marginBottom:-1,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:subTab===id?700:400,background:"transparent",color:subTab===id?T.blue:T.textMute,transition:"color .12s,border-color .12s"}}>{lbl}</button>
+                ))}
+              </div>
+            : <div className="no-print" style={{display:"flex",marginBottom:16,gap:8}}>
+                {[["import","นำเข้า"],["monthtable","ตารางเดือน"]].map(([id,lbl])=>(
+                  <button key={id} onClick={()=>setSubTab(id)} style={{padding:"6px 18px",borderRadius:6,border:`1px solid #1565C0`,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:subTab===id?700:500,background:subTab===id?"#1565C0":"#FFFFFF",color:subTab===id?"#FFFFFF":"#1565C0",transition:"all .12s"}}>{lbl}</button>
+                ))}
+              </div>
+          }
 
           {/* IMPORT */}
           {subTab==="import"&&<div style={{maxWidth:640,margin:"0 auto"}}>
@@ -470,12 +479,12 @@ export default function App() {
               onDrop={e=>{e.preventDefault();handleFilesSelected(e.dataTransfer.files);}}
               onDragOver={e=>e.preventDefault()}
               onClick={()=>!pdfLoading&&fileRef.current?.click()}
-              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:T.blue}`,borderRadius:8,padding:"32px 24px",textAlign:"center",background:T.card,cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
-              <div style={{fontSize:36,marginBottom:10,opacity:pdfLoading?0.4:0.8}}>{pdfLoading?"⏳":"📄"}</div>
+              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:(isDark?T.blue:"#7BA7E8")}`,borderRadius:8,padding:"32px 24px",textAlign:"center",background:isDark?T.card:"#F5F8FF",cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
+              <div style={{fontSize:36,marginBottom:10,color:"#90A4AE",opacity:pdfLoading?0.4:1}}>{pdfLoading?"⏳":"📄"}</div>
               <div style={{fontSize:14,fontWeight:600,color:pdfLoading?T.textFaint:T.blue,marginBottom:5,letterSpacing:"0.01em"}}>
                 {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
               </div>
-              <div style={{fontSize:11,color:T.textFaint}}>PDF · PNG · JPG · เลือกหลายไฟล์พร้อมกันได้</div>
+              <div style={{fontSize:11,color:isDark?T.textFaint:"#757575"}}>PDF · PNG · JPG · เลือกหลายไฟล์พร้อมกันได้</div>
               <input ref={fileRef} type="file" accept=".pdf,image/*" multiple style={{display:"none"}} onChange={e=>handleFilesSelected(e.target.files)}/>
             </div>
 
@@ -483,16 +492,16 @@ export default function App() {
             <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:14,border:`1px solid ${T.border}`}}>
               <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>เพิ่มวันด้วยตนเอง</div>
               <div style={{display:"flex",gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:13}}/>
-                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"6px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>เพิ่ม</button>
+                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||parseInt(v)<=31)setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border2}`,background:"#FFFFFF",color:T.text,fontFamily:"inherit",fontSize:13}}/>
+                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"6px 14px",background:"#1565C0",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>เพิ่ม</button>
               </div>
-              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>{cur.days.map(d=><span key={d} style={{background:T.p97Bg,color:T.blue,padding:"3px 8px 3px 10px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${T.border2}`}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:T.textMute,cursor:"pointer",fontSize:13,padding:0,lineHeight:1,marginTop:-1}}>×</button></span>)}</div>}
+              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>{cur.days.map(d=><span key={d} style={{background:isDark?T.p97Bg:"#E8F0FE",color:isDark?T.blue:"#1A237E",padding:"3px 8px 3px 10px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${isDark?T.border2:"#BFCCF4"}`}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:isDark?T.textMute:"#5C6BC0",cursor:"pointer",fontSize:13,padding:0,lineHeight:1,marginTop:-1}}>×</button></span>)}</div>}
             </div>
 
             {/* Restore from CSV Backup */}
             <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:10,border:`1px solid ${T.border}`}}>
-              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>Restore จาก Backup</div>
-              <button onClick={()=>importBackupRef.current?.click()} style={{padding:'6px 14px',background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:500}}>เลือกไฟล์ backup CSV</button>
+              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>🔥 Restore จาก Backup</div>
+              <button onClick={()=>importBackupRef.current?.click()} style={{padding:'6px 14px',background:"#37474F",color:"#FFFFFF",border:"none",borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:500}}>📁 เลือกไฟล์ backup CSV</button>
               <input ref={importBackupRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)handleImportBackup(f);e.target.value='';}}/>
             </div>
           </div>}
@@ -614,7 +623,7 @@ export default function App() {
       )}
 
       {/* Mobile bottom nav */}
-      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"#0D1117",borderTop:"1px solid #1A2540",display:"flex"}}>
+      {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:isDark?"#0D1117":"#1565C0",borderTop:isDark?"1px solid #1A2540":"none",display:"flex"}}>
         {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
           <button key={id} onClick={id==="backup"?()=>exportBackup(DB,fiscalYear):()=>setMainTab(id)}
             style={{flex:1,border:"none",borderTop:`2px solid ${mainTab===id&&id!=="backup"?T.gold:"transparent"}`,background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 0 6px",gap:2,color:mainTab===id&&id!=="backup"?"#fff":"rgba(255,255,255,0.45)",fontFamily:"inherit",transition:"color .15s"}}>
