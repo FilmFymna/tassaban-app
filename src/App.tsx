@@ -76,6 +76,8 @@ interface Theme {
   tblHeadTxt: string;
   histBg: string;
   histBdr: string;
+  totBg: string;
+  totTxt: string;
 }
 
 interface Msg {
@@ -218,6 +220,8 @@ const mkTheme = (dark: boolean): Theme => ({
   tblHeadTxt:dark ? "#94a3b8" : "#4a5568",
   histBg:    dark ? "#0d2b1a" : "#f0fdf4",
   histBdr:   dark ? "#166534" : "#86efac",
+  totBg:     dark ? "#1e3a5f" : "#dbeafe",
+  totTxt:    dark ? "#93c5fd" : "#1e3a5f",
 });
 
 const initM = (): MonthData => ({ days:[], table:{}, history:[] });
@@ -909,7 +913,7 @@ function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}: MTableProps){
               </React.Fragment>)}
               <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:col}}>97%</th>
               <th style={{width:60,padding:"4px 2px",textAlign:"center",fontWeight:700,fontSize:10,color:"#fff",background:"#888"}}>3%</th>
-              <th style={{width:70,padding:"4px 2px",textAlign:"center",fontWeight:800,fontSize:10,color:"#1a1a2e",background:"#bfdbfe"}}>รวม</th>
+              <th style={{width:70,padding:"4px 2px",textAlign:"center",fontWeight:800,fontSize:10,color:T.totTxt,background:T.totBg}}>รวม</th>
             </tr>
           </thead>
           <tbody>
@@ -927,13 +931,13 @@ function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}: MTableProps){
                 </React.Fragment>)}
                 <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:700,color:T.p97Num||col,background:T.p97Sum}}>{n2(r97)}</td>
                 <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:600,color:T.textMute,background:T.p3Sum}}>{n2(r3)}</td>
-                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:800,color:T.text,background:"#dbeafe",fontSize:12}}>{n2(r97+r3)}</td>
+                <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:800,color:T.totTxt,background:T.totBg,fontSize:12}}>{n2(r97+r3)}</td>
               </tr>);
             })}
             <tr style={{borderTop:`2px solid ${T.borderHeavy}`,background:T.p97Sum}}>
               <td style={{padding:"5px 8px",fontWeight:800,color:col,borderRight:`2px solid ${T.borderHeavy}`,fontSize:12}}>รวม 97%</td>
               {days.map(d=><React.Fragment key={d}>
-                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:col,background:"#dbeafe",fontSize:12}}>{n2(sD(table,d,list,"p97"))}</td>
+                <td style={{padding:"5px 4px",textAlign:"right",fontWeight:800,color:T.totTxt,background:T.totBg,fontSize:12}}>{n2(sD(table,d,list,"p97"))}</td>
                 <td style={{padding:"5px 4px",background:T.card3,borderRight:`2px solid ${T.borderHeavy}`}}></td>
               </React.Fragment>)}
               <td style={{padding:"5px 6px",textAlign:"right",background:col,color:"#fff",fontWeight:900,fontSize:13}} colSpan={3}>{n2(hdr97)}</td>
