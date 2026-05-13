@@ -38,7 +38,7 @@ export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab
                 <th style={th(40)} rowSpan={2}>วัน</th>
                 <th style={{...th(270),background:T.blue,color:"#fff"}} colSpan={3}>เทศบาล</th>
                 <th style={{...th(270),background:T.green,color:"#fff"}} colSpan={3}>อบต.</th>
-                <th style={{...th(110),background:"#1a1a2e",color:"#ffd84d"}} rowSpan={2}>รวมทั้งหมด</th>
+                <th style={{...th(110),background:T.totRow,color:T.totGold}} rowSpan={2}>รวมทั้งหมด</th>
               </tr>
               <tr>
                 <th style={{...th(85),background:T.p97Bg}}>97%</th>

@@ -379,11 +379,11 @@ export default function App() {
         </div>
         {!isMobile&&<div style={{display:"flex",alignItems:"center",flex:1,marginLeft:12,gap:6}}>
           {[["monthly","รายเดือน"],["summary","รายปี"],["chart","กราฟ"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"5px 14px",borderRadius:20,border:mainTab===id?"none":"1px solid rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:500,background:mainTab===id?"#F59E0B":(isDark?"rgba(255,255,255,0.08)":"#1E88E5"),color:"#fff",transition:"all .15s"}}>{lbl}</button>
+            <button key={id} onClick={()=>setMainTab(id)} style={{padding:"5px 14px",borderRadius:20,border:mainTab===id?"none":"1px solid rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mainTab===id?700:500,background:mainTab===id?T.gold:(isDark?"rgba(255,255,255,0.08)":"#1E88E5"),color:"#fff",transition:"all .15s"}}>{lbl}</button>
           ))}
         </div>}
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
-          {saving&&<div style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"บันทึกไม่ได้"}</div>}
+          {saving&&<div onClick={saving==="error"?()=>{setSaving(""); dirty.current = new Set(Object.keys(DB)); setDB(d=>({...d}));}:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
           {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
           <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
             style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
@@ -430,7 +430,7 @@ export default function App() {
           <div className="no-print" style={{display:"flex",marginBottom:16,gap:8}}>
             {[["import","นำเข้า"],["monthtable","ตารางเดือน"]].map(([id,lbl])=>(
               <button key={id} onClick={()=>setSubTab(id)} style={{padding:"6px 18px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:subTab===id?700:500,transition:"all .12s",
-                border: isDark?"none":`1px solid #1565C0`,
+                border: isDark?"1px solid transparent":`1px solid #1565C0`,
                 background: isDark?(subTab===id?"#1E3A6E":"#1A3060"):(subTab===id?"#1565C0":"#FFFFFF"),
                 color: isDark?(subTab===id?"#FFFFFF":"#A0B4D0"):(subTab===id?"#FFFFFF":"#1565C0"),
               }}>{lbl}</button>
@@ -460,8 +460,8 @@ export default function App() {
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
                     <button onClick={()=>{ setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
-                    <button onClick={()=>{if(pdfDay&&pendingResult)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult}
-                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
+                      <button onClick={()=>{if(pdfDay&&pendingResult&&!pdfLoading)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult||pdfLoading}
+                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult&&!pdfLoading?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult&&!pdfLoading?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
                       ยืนยัน
                     </button>
                   </div>
@@ -545,10 +545,10 @@ export default function App() {
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
                   <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue} gold={T.totGold}/>
                   <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green} gold={T.totGold}/>
-                  <div style={{background:"#0D1117",color:"#fff",borderRadius:8,padding:"12px 14px"}}>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
+                  <div style={{background:isDark?"#0D1117":T.card3,borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,color:T.textFaint,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
                     <div style={{fontSize:22,fontWeight:800,color:T.gold,letterSpacing:"-0.02em"}}>{(aSum97+aSum3).toFixed(2)}</div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
+                    <div style={{fontSize:10,color:T.textMute,marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
                   </div>
                 </div>
               </>}
