@@ -18,7 +18,7 @@ export const mkTheme = (dark: boolean): Theme => ({
   textMed:   dark ? "#94A3B8" : "#475569",
   textMute:  dark ? "#A0B4D0" : "#64748B",
   textFaint: dark ? "#6B7F99" : "#94A3B8",
-  rowAlt:    dark ? "#0C1830" : "#D8E2EF",
+  rowAlt:    dark ? "#0C1830" : "#E1E9F4",
   shadow:    dark ? "rgba(0,0,0,0.5)" : "rgba(15,23,42,0.05)",
   shadow2:   dark ? "rgba(0,0,0,0.7)" : "rgba(15,23,42,0.1)",
   p97Bg:     dark ? "#0E1F40" : "#E4EAFF",

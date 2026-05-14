@@ -434,7 +434,7 @@ export default function App() {
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
           <div className="no-print" style={{marginBottom:14}}>
             <select value={mon} onChange={e=>{setMon(e.target.value);setSubTab("import");}}
-              style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.blue}`,background:isDark?"#0D1B3E":"#fff",color:T.text,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer",minWidth:160,outline:"none"}}>
+              style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.blue}`,background:isDark?T.card2:T.card,color:T.text,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer",minWidth:160,outline:"none"}}>
               {MONTHS.map(m=>(
                 <option key={m} value={m}>{hasData(m)?`• ${m}`:m}</option>
               ))}
@@ -488,7 +488,7 @@ export default function App() {
               onDrop={e=>{e.preventDefault();handleFilesSelected(e.dataTransfer.files);}}
               onDragOver={e=>e.preventDefault()}
               onClick={()=>!pdfLoading&&fileRef.current?.click()}
-              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:(isDark?"#2A4A8A":"#7BA7E8")}`,borderRadius:8,padding:"32px 24px",textAlign:"center",background:isDark?"#111E38":"#F5F8FF",cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
+              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:(isDark?"#2A4A8A":"#7BA7E8")}`,borderRadius:8,padding:"32px 24px",minHeight:220,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",background:isDark?"#111E38":"#F5F8FF",cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
               <div style={{fontSize:36,marginBottom:10,color:isDark?"#4A6FA5":"#90A4AE",opacity:pdfLoading?0.4:1}}>{pdfLoading?"⏳":"📄"}</div>
               <div style={{fontSize:14,fontWeight:600,color:pdfLoading?T.textFaint:(isDark?"#5B9BD5":T.blue),marginBottom:5,letterSpacing:"0.01em"}}>
                 {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
