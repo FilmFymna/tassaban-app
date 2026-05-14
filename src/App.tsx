@@ -436,7 +436,7 @@ export default function App() {
             <select value={mon} onChange={e=>{setMon(e.target.value);setSubTab("import");}}
               style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.blue}`,background:isDark?"#0D1B3E":"#fff",color:T.text,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer",minWidth:160,outline:"none"}}>
               {MONTHS.map(m=>(
-                <option key={m} value={m}>{hasData(m)?`★ ${m}`:m}</option>
+                <option key={m} value={m}>{hasData(m)?`• ${m}`:m}</option>
               ))}
             </select>
           </div>
