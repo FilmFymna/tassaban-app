@@ -359,6 +359,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [showDayModal, confirmDialog, reviewData, msg]);
 
+  const restoreBg = isDark ? "#2A4A7A" : "#37474F";
   const tSum97 = sG(cur.table, TESSABAN, cur.days, "p97");
   const tSum3  = sG(cur.table, TESSABAN, cur.days, "p3");
   const oSum97 = sG(cur.table, OBT,      cur.days, "p97");
@@ -483,35 +484,80 @@ export default function App() {
               </div>
             )}
 
-            {/* PDF Drop Zone */}
+            {/* PDF Drop Zone — Hero */}
             <div
               onDrop={e=>{e.preventDefault();handleFilesSelected(e.dataTransfer.files);}}
               onDragOver={e=>e.preventDefault()}
               onClick={()=>!pdfLoading&&fileRef.current?.click()}
-              style={{border:`1.5px dashed ${pdfLoading?T.textFaint:(isDark?"#2A4A8A":"#7BA7E8")}`,borderRadius:8,padding:"32px 24px",minHeight:220,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",background:isDark?"#111E38":"#F5F8FF",cursor:pdfLoading?"default":"pointer",marginBottom:14}}>
-              <div style={{fontSize:36,marginBottom:10,color:isDark?"#4A6FA5":"#90A4AE",opacity:pdfLoading?0.4:1}}>{pdfLoading?"⏳":"📄"}</div>
-              <div style={{fontSize:14,fontWeight:600,color:pdfLoading?T.textFaint:(isDark?"#5B9BD5":T.blue),marginBottom:5,letterSpacing:"0.01em"}}>
-                {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่ — เดือน${mon}`}
+              style={{
+                border:`2px ${pdfLoading?"dashed":"solid"} ${pdfLoading?T.textFaint:T.blue}`,
+                borderRadius:12,
+                padding:"48px 32px",
+                minHeight:320,
+                display:"flex",
+                flexDirection:"column",
+                alignItems:"center",
+                justifyContent:"center",
+                textAlign:"center",
+                background:isDark?T.card2:T.card,
+                cursor:pdfLoading?"default":"pointer",
+                marginBottom:16,
+                transition:"border-color .15s,background .15s",
+              }}>
+              <div style={{fontSize:56,marginBottom:14,opacity:pdfLoading?0.4:1}}>{pdfLoading?"⏳":"📄"}</div>
+              <div style={{fontSize:18,fontWeight:700,color:pdfLoading?T.textFaint:T.blue,marginBottom:8,letterSpacing:"0.01em"}}>
+                {pdfLoading?"Claude กำลังอ่าน PDF...":`วาง PDF หรือรูปภาพที่นี่`}
               </div>
-              <div style={{fontSize:11,color:isDark?"#6B7F99":"#757575"}}>PDF · PNG · JPG · เลือกหลายไฟล์พร้อมกันได้</div>
+              {!pdfLoading&&<div style={{fontSize:13,color:T.textFaint,marginBottom:4}}>เดือน{mon} · PDF · PNG · JPG</div>}
+              {!pdfLoading&&<div style={{fontSize:12,color:T.textFaint}}>เลือกหลายไฟล์พร้อมกันได้</div>}
               <input ref={fileRef} type="file" accept=".pdf,image/*" multiple style={{display:"none"}} onChange={e=>handleFilesSelected(e.target.files)}/>
             </div>
 
-            {/* Manual day add */}
-            <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:14,border:`1px solid ${T.border}`}}>
-              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>เพิ่มวันด้วยตนเอง</div>
-              <div style={{display:"flex",gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay} onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||( parseInt(v)>=1 && parseInt(v)<=31))setMDay(v);}} onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}} style={{width:90,padding:"6px 10px",borderRadius:6,border:`1px solid ${isDark?"#2A3F6A":T.border2}`,background:isDark?"#0D1B3E":"#FFFFFF",color:isDark?"#8BA4C4":T.text,fontFamily:"inherit",fontSize:13}}/>
-                <button onClick={()=>{pushDay(mDay);setMDay("");}} style={{padding:"6px 14px",background:isDark?"#1E5FA8":"#1565C0",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>เพิ่ม</button>
-              </div>
-              {cur.days.length>0&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>{cur.days.map(d=><span key={d} style={{background:isDark?"#1A2F55":"#E8F0FE",color:isDark?"#7EB3E8":"#1A237E",padding:"3px 8px 3px 10px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${isDark?"#2A4070":"#BFCCF4"}`}}>{d}<button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:isDark?"#E05A3A":"#5C6BC0",cursor:"pointer",fontSize:13,padding:0,lineHeight:1,marginTop:-1}}>×</button></span>)}</div>}
-            </div>
+            {/* Bottom 2-column grid: Manual add | Restore */}
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
 
-            {/* Restore from CSV Backup */}
-            <div style={{background:T.card,borderRadius:8,padding:"14px 16px",marginTop:10,border:`1px solid ${T.border}`}}>
-              <div style={{fontWeight:600,color:T.textMed,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>🔥 Restore จาก Backup</div>
-              <button onClick={()=>importBackupRef.current?.click()} style={{padding:'6px 14px',background:isDark?"#2A4A7A":"#37474F",color:"#FFFFFF",border:"none",borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:500}}>📁 เลือกไฟล์ backup CSV</button>
-              <input ref={importBackupRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)handleImportBackup(f);e.target.value='';}}/>
+              {/* เพิ่มวันด้วยตนเอง */}
+              <div style={{background:T.card,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`}}>
+                <div style={{background:T.blue,padding:"10px 16px"}}>
+                  <span style={{fontWeight:700,fontSize:13,color:"#fff",letterSpacing:"0.01em"}}>เพิ่มวันด้วยตนเอง</span>
+                </div>
+                <div style={{padding:"16px"}}>
+                  <div style={{display:"flex",gap:8}}>
+                    <input type="text" inputMode="numeric" placeholder="เช่น 5" value={mDay}
+                      onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||( parseInt(v)>=1 && parseInt(v)<=31))setMDay(v);}}
+                      onKeyDown={e=>{if(e.key==="Enter"){pushDay(mDay);setMDay("");}}}
+                      style={{flex:1,padding:"8px 12px",borderRadius:6,border:`1px solid ${isDark?"#2A3F6A":T.border2}`,background:isDark?"#0D1B3E":"#FFFFFF",color:isDark?"#8BA4C4":T.text,fontFamily:"inherit",fontSize:14}}/>
+                    <button onClick={()=>{pushDay(mDay);setMDay("");}}
+                      style={{padding:"8px 18px",background:T.blue,color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
+                      เพิ่ม
+                    </button>
+                  </div>
+                  {cur.days.length>0&&<div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:5}}>
+                    {cur.days.map(d=>(
+                      <span key={d} style={{background:isDark?"#1A2F55":"#E8F0FE",color:isDark?"#7EB3E8":"#1A237E",padding:"4px 8px 4px 12px",borderRadius:4,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4,border:`1px solid ${isDark?"#2A4070":"#BFCCF4"}`}}>
+                        {d}
+                        <button onClick={()=>dropDay(d)} style={{border:"none",background:"none",color:isDark?"#E05A3A":"#5C6BC0",cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                      </span>
+                    ))}
+                  </div>}
+                </div>
+              </div>
+
+              {/* Restore จาก Backup */}
+              <div style={{background:T.card,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`}}>
+                <div style={{background:restoreBg,padding:"10px 16px"}}>
+                  <span style={{fontWeight:700,fontSize:13,color:"#fff",letterSpacing:"0.01em"}}>🔥 Restore จาก Backup</span>
+                </div>
+                <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{fontSize:12,color:T.textMute}}>นำเข้าข้อมูลจากไฟล์ backup CSV</div>
+                  <button onClick={()=>importBackupRef.current?.click()}
+                    style={{padding:"8px 18px",background:restoreBg,color:"#FFFFFF",border:"none",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,alignSelf:"flex-start"}}>
+                    📁 เลือกไฟล์ backup CSV
+                  </button>
+                  <input ref={importBackupRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)handleImportBackup(f);e.target.value="";}}/>
+                </div>
+              </div>
+
             </div>
           </div>}
 
