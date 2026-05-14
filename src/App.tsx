@@ -432,12 +432,13 @@ export default function App() {
 
         {/* MONTHLY */}
         {mainTab==="monthly"&&<div style={{padding:isMobile?"8px 10px":"12px 16px"}}>
-          <div className="no-print" style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-            {MONTHS.map(m=>(
-              <button key={m} onClick={()=>{setMon(m);setSubTab("import");}} style={{padding:"5px 13px",borderRadius:6,border:`1px solid ${mon===m?(isDark?"#1E3A6E":T.blue):hasData(m)?(isDark?"rgba(74,143,232,0.3)":"rgba(21,101,192,0.3)"):T.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:mon===m?700:500,position:"relative",background:mon===m?(isDark?"#1E3A6E":T.blue):hasData(m)?T.p97Bg:"transparent",color:mon===m?"#fff":(isDark?T.textMute:T.blue),transition:"all .12s"}}>
-                {m}{hasData(m)&&mon!==m&&<span style={{position:"absolute",top:-3,right:-3,width:6,height:6,background:isDark?"#4A8FE8":"#1E88E5",borderRadius:"50%",border:`1.5px solid ${T.bg}`}}/>}
-              </button>
-            ))}
+          <div className="no-print" style={{marginBottom:14}}>
+            <select value={mon} onChange={e=>{setMon(e.target.value);setSubTab("import");}}
+              style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.blue}`,background:isDark?"#0D1B3E":"#fff",color:T.text,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer",minWidth:160,outline:"none"}}>
+              {MONTHS.map(m=>(
+                <option key={m} value={m}>{hasData(m)?`★ ${m}`:m}</option>
+              ))}
+            </select>
           </div>
 
           <div className="no-print" style={{display:"flex",marginBottom:16,gap:8}}>
