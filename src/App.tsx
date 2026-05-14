@@ -452,7 +452,7 @@ export default function App() {
           </div>
 
           {/* IMPORT */}
-          {subTab==="import"&&<div style={{maxWidth:640,margin:"0 auto"}}>
+          {subTab==="import"&&<div style={{maxWidth:900,margin:"0 auto"}}>
 
             {/* Day modal */}
             {showDayModal&&(
