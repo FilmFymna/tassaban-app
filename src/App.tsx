@@ -97,11 +97,14 @@ export default function App() {
   const undoRef         = useRef<{ mon: string; day: string; data: MonthData } | null>(null);
   const undoTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef    = useRef<boolean>(false);
+  const pendingMonRef   = useRef<string>("ตุลาคม");
+  const queueTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMobile        = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
 
-  const toggleDark = () => setIsDark(d => { localStorage.setItem("theme", d?"light":"dark"); return !d; });
+  // BUG-25: wrap in useCallback to avoid unnecessary re-renders
+  const toggleDark = useCallback(() => setIsDark(d => { localStorage.setItem("theme", d?"light":"dark"); return !d; }), []);
 
   const getM    = useCallback((m: string): MonthData => DB[m]||initM(), [DB]);
   const hasData = useCallback((m: string): boolean => (DB[m]?.days?.length||0)>0, [DB]);
@@ -119,7 +122,8 @@ export default function App() {
   // Load DB on fiscal year change
   useEffect(() => {
     setReady(false); setDB({}); dirty.current.clear();
-    dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(console.error).finally(()=>setReady(true));
+    // BUG-13: show user-visible error when dbLoad fails
+    dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(e => { console.error(e); setMsg({ ok: false, text: '❌ โหลดข้อมูลไม่สำเร็จ — กรุณา refresh หน้าจอ' }); }).finally(()=>setReady(true));
   }, [fiscalYear]);
 
   // Sync DB to ref for save snapshot
@@ -152,29 +156,41 @@ export default function App() {
     return () => window.removeEventListener("online", triggerRetry);
   }, [saving, triggerRetry]);
 
+  // BUG-21: cleanup undoTimerRef on unmount
+  useEffect(() => () => { if(undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+
+  // BUG-9: cleanup queueTimerRef on unmount
+  useEffect(() => () => { if(queueTimerRef.current) clearTimeout(queueTimerRef.current); }, []);
+
   // Item 7: auto-save with retry on error
   useEffect(() => {
     if(!ready) return;
+    // BUG-2: track cancellation so stale async lambdas don't mutate dirty after fiscalYear changes
+    let cancelled = false;
     const t = setTimeout(async () => {
       const months = [...dirty.current];
       if(!months.length) return;
       setSaving("saving");
       try {
         const snapshot = DBRef.current;
+        // BUG-4: capture dirty snapshot before await so we only delete months that were dirty at save time
+        const dirtySnapshot = new Set(months);
         await Promise.all(months.map(m => {
           const md = snapshot[m];
           if(!md) return Promise.resolve();
           return dbSave(m, md, fiscalYear);
         }));
-        months.forEach(m => dirty.current.delete(m));
+        if(cancelled) return; // BUG-2: don't mutate dirty or call setSaving after cleanup
+        dirtySnapshot.forEach(m => dirty.current.delete(m)); // BUG-4: use snapshot, not live dirty
         setSaving("saved"); setTimeout(() => setSaving(""), 2500);
       } catch(e) {
+        if(cancelled) return; // BUG-2
         console.error(e);
         setSaving("error");
         setMsg({ ok: false, text: `❌ บันทึกไม่สำเร็จ — แก้ internet แล้วกด retry` });
       }
     }, 1200);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); }; // BUG-2: cleanup sets cancelled
   }, [DB, ready, fiscalYear]);
 
   const pushDay = useCallback((d: string, mo?: string) => {
@@ -195,9 +211,10 @@ export default function App() {
       const updated = {...prev};
       const c = prev[mon];
       if(c) updated[mon] = { ...c, days:c.days.filter((x:string)=>x!==d), table:rmDayTbl({...c.table},d), history:c.history.filter((h:any)=>h.day!==d) };
+      // BUG-3: mark dirty inside setDB callback so we use the correct mon from closure
+      dirty.current.add(mon);
       return updated;
     });
-    dirty.current.add(mon);
     setMsg({ ok:true, text:`🗑️ ลบวันที่ ${d} แล้ว` });
   }, [mon]);
 
@@ -208,6 +225,7 @@ export default function App() {
   // Item 6 + 9: handle file pick — starts API call in background, shows day modal
   const startExtract = useCallback(async (file: File) => {
     cancelledRef.current = false;
+    pendingMonRef.current = mon; // BUG-1: capture mon at extract start to avoid stale closure
     setPendingPdf(file);
     setPendingResult(null);
     // Pre-fill day from filename
@@ -241,14 +259,16 @@ export default function App() {
         setPdfDay(prev => prev === "" ? String(docDay) : prev);
       }
     } catch(e) {
+      if(cancelledRef.current) return;
       setPendingResult(null);
       setMsg({ ok:false, text:`❌ ${(e as Error).message}` });
       setShowDayModal(false);
       setPendingPdf(null);
     } finally {
-      setPdfLoading(false);
+      // BUG-6: don't reset pdfLoading if this request was already cancelled
+      if(!cancelledRef.current) setPdfLoading(false);
     }
-  }, []);
+  }, [mon]);
 
   const handlePdfPick = useCallback((file: File | undefined | null) => {
     if(!file) return;
@@ -269,7 +289,8 @@ export default function App() {
 
   // Submit day modal — uses pre-loaded result if available, else error
   const handleDaySubmit = useCallback((dayStr: string) => {
-    const activeMon = mon;
+    // BUG-1: use the month captured at startExtract time, not current mon state
+    const activeMon = pendingMonRef.current;
     setShowDayModal(false);
 
     if(!pendingResult) {
@@ -295,7 +316,7 @@ export default function App() {
     }
 
     proceed();
-  }, [mon, pendingResult, getM]);
+  }, [pendingResult, getM]);
 
   // Item 8: validate numbers + save
   const confirmReview = useCallback(() => {
@@ -327,7 +348,9 @@ export default function App() {
     if(pdfQueue.length > 0) {
       const [next, ...rest] = pdfQueue;
       setPdfQueue(rest);
-      setTimeout(() => startExtract(next), 300);
+      // BUG-9: store timer id so it can be cleared on unmount/cancel
+      if(queueTimerRef.current) clearTimeout(queueTimerRef.current);
+      queueTimerRef.current = setTimeout(() => startExtract(next), 300);
     }
   }, [reviewData, setM, pdfQueue, startExtract]);
 
@@ -374,10 +397,11 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if(e.key === 'Escape') {
+        // BUG-27: close one layer at a time (topmost first)
         if(showDayModal) { cancelledRef.current = true; setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
-        if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
-        if(reviewData) setReviewData(null);
-        if(msg) setMsg(null);
+        else if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
+        else if(reviewData) setReviewData(null);
+        else if(msg) setMsg(null);
       }
     };
     window.addEventListener('keydown', handler);
@@ -425,7 +449,8 @@ export default function App() {
           {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
           <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
             style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
-            {Array.from({length:6},(_,i)=>parseInt(fiscalYear)-3+i).map(y=><option key={y} value={String(y)} style={{color:"#000",background:"#1e293b"}}>ปี {y}</option>)}
+            {/* BUG-15: range always includes both current fiscal year and selected year */}
+            {(() => { const curFY = parseInt(currentFiscalYear()); const selFY = parseInt(fiscalYear); const minFY = Math.min(curFY - 2, selFY - 2); return Array.from({length:6},(_,i)=>minFY+i); })().map(y=><option key={y} value={String(y)} style={{color:"#000",background:"#1e293b"}}>ปี {y}</option>)}
           </select>
           <button onClick={toggleDark} style={{width:32,height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontFamily:"inherit",fontSize:13,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)"}} title={isDark?"Light mode":"Dark mode"}>{isDark?"☀":"🌙"}</button>
         </div>

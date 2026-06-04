@@ -12,10 +12,12 @@ ${ORGS.join("\n")}
 รูปแบบ: {"rows":[{"name":"ชื่อในเอกสาร","matched":"ชื่อในระบบ","count":0,"p97":0.0,"p3":0.0,"amount":0}],"total_count":0,"total_p97":0.0,"total_p3":0.0,"total_amount":0,"document_day":null}`;
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // CORS headers — BUG-5: never fall back to wildcard; BUG-26: only set if not already set by api-server.js
+  if (!res.getHeader('Access-Control-Allow-Origin')) {
+    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || 'https://tassaban-app1.vercel.app');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
   if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -62,10 +64,9 @@ export default async function handler(req, res) {
     if (!r.ok) { const e = await r.text(); return res.status(502).json({ error: `Anthropic API error ${r.status}: ${e.slice(0, 300)}` }); }
     const data = await r.json();
     const text = data.content?.[0]?.text || '';
-    let jsonStr = null;
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if(start !== -1 && end !== -1 && end > start) jsonStr = text.slice(start, end+1);
+    // BUG-17: use regex to capture the largest valid JSON object rather than first/last brace
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : null;
     if (!jsonStr) return res.status(500).json({ error: 'ไม่พบ JSON', raw: text.slice(0, 200) });
     let parsed;
     try { parsed = JSON.parse(jsonStr); } catch (e) { return res.status(500).json({ error: 'JSON parse failed', raw: jsonStr.slice(0, 200) }); }

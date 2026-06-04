@@ -17,11 +17,15 @@ export function findOrg(name: string | null | undefined): string | null {
   // exact match first
   const exact = ALL.find(o => nm(o) === n);
   if (exact) return exact;
-  // fallback substring — require min 3 chars, longer string must contain shorter
+  // BUG-12: fallback substring — require min 3 chars, longer string must contain shorter,
+  // and the shorter string must be ≥60% the length of the longer to prevent false positives
   return ALL.find(o => {
     const m = nm(o);
     if(m.length < 3 || n.length < 3) return false;
-    return m.length > n.length ? m.includes(n) : n.includes(m);
+    const longer = m.length > n.length ? m : n;
+    const shorter = m.length > n.length ? n : m;
+    if(shorter.length / longer.length < 0.6) return false;
+    return longer.includes(shorter);
   }) || null;
 }
 
