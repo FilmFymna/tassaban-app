@@ -16,6 +16,7 @@ export interface ExtractResponse {
   error?: string;
 }
 export interface Msg { ok: boolean; text: string; }
+export type SavingState = "" | "saving" | "saved" | "error";
 
 export interface Theme {
   blue: string; green: string; gold: string; red: string;

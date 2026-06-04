@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-import type { DBState, MonthData, ExtractResponse, Msg } from './types';
+import type { DBState, MonthData, ExtractResponse, Msg, SavingState } from './types';
 import { TESSABAN, OBT, ALL, MONTHS } from './data/orgs';
 import { mkTheme } from './utils/theme';
 import {
@@ -66,7 +66,7 @@ function useIsMobile(): boolean {
 export default function App() {
   const [isDark,      setIsDark]      = useState(() => localStorage.getItem("theme") === "dark");
   const [ready,       setReady]       = useState(false);
-  const [saving,      setSaving]      = useState("");
+  const [saving,      setSaving]      = useState<SavingState>("");
   const [fiscalYear,  setFiscalYear]  = useState(currentFiscalYear);
   const [mainTab,     setMainTab]     = useState("monthly");
   const [subTab,      setSubTab]      = useState("import");
@@ -126,6 +126,32 @@ export default function App() {
   const DBRef = useRef<DBState>(DB);
   useEffect(() => { DBRef.current = DB; }, [DB]);
 
+  const savingRef = useRef<SavingState>("");
+  useEffect(() => { savingRef.current = saving; }, [saving]);
+
+  const triggerRetry = useCallback(() => {
+    setSaving("");
+    dirty.current = new Set(Object.keys(DBRef.current));
+    setDB(d => ({ ...d }));
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty.current.size > 0 || savingRef.current === "error") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+
+  useEffect(() => {
+    if (saving !== "error") return;
+    window.addEventListener("online", triggerRetry);
+    return () => window.removeEventListener("online", triggerRetry);
+  }, [saving, triggerRetry]);
+
   // Item 7: auto-save with retry on error
   useEffect(() => {
     if(!ready) return;
@@ -145,7 +171,6 @@ export default function App() {
       } catch(e) {
         console.error(e);
         setSaving("error");
-        // Show retry option in msg
         setMsg({ ok: false, text: `❌ บันทึกไม่สำเร็จ — แก้ internet แล้วกด retry` });
       }
     }, 1200);
@@ -396,7 +421,7 @@ export default function App() {
           ))}
         </div>}
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
-          {saving&&<div onClick={saving==="error"?()=>{setSaving(""); dirty.current = new Set(Object.keys(DB)); setDB(d=>({...d}));}:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
+          {saving&&<div onClick={saving==="error"?triggerRetry:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
           {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
           <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
             style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
@@ -423,9 +448,8 @@ export default function App() {
                 setMsg({ok:true,text:`↩️ คืนข้อมูลวันที่ ${u.day} แล้ว`});
               }} style={{padding:'2px 10px',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700}}>↩️ Undo</button>
             )}
-            {/* Item 7: retry save button */}
             {!msg.ok&&saving==="error"&&(
-              <button onClick={()=>{setSaving(""); dirty.current = new Set(Object.keys(DB)); setDB(d=>({...d}));}} style={{padding:'2px 10px',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700}}>🔄 retry</button>
+              <button onClick={triggerRetry} style={{padding:'2px 10px',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700}}>🔄 retry</button>
             )}
             <button onClick={()=>setMsg(null)} style={{border:"none",background:"none",cursor:"pointer",fontSize:16,opacity:.5,color:msg.ok?T.msgOkTxt:T.msgErrTxt}}>×</button>
           </div>
