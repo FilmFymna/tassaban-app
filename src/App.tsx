@@ -8,7 +8,7 @@ import {
   n2, fmt, sR, sD, sG, findOrg,
   initM, srtDays, addDayTbl, rmDayTbl,
   exportCSV, exportBackup,
-  extractDayFromFilename, sanitizeNum,
+  extractDayFromFilename, sanitizeNum, normalizeMonth,
 } from './utils/helpers';
 import MTable   from './components/MTable';
 import ChartView from './components/ChartView';
@@ -222,18 +222,13 @@ export default function App() {
     setM(mon, c => ({...c, table:{...c.table,[org]:{...c.table[org],[day]:{...c.table[org]?.[day],[f]:v}}}}));
   }, [mon, setM]);
 
-  // Item 6 + 9: handle file pick — starts API call in background, shows day modal
   const startExtract = useCallback(async (file: File) => {
     cancelledRef.current = false;
     pendingMonRef.current = mon; // BUG-1: capture mon at extract start to avoid stale closure
     setPendingPdf(file);
     setPendingResult(null);
-    // Pre-fill day from filename
     const autoDay = extractDayFromFilename(file.name);
-    setPdfDay(autoDay || "");
-    setShowDayModal(true);
 
-    // Fire off API call in background while user types/checks the day
     setPdfLoading(true);
     try {
       const b64 = await new Promise<string>((res, rej) => {
@@ -252,17 +247,27 @@ export default function App() {
       if(!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if(!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
       if(cancelledRef.current) return;
-      setPendingResult(parsed);
-      // Item 6: if Claude detected the day, override only if field is still empty
-      const docDay = parsed.document_day;
-      if(docDay != null && docDay >= 1 && docDay <= 31) {
-        setPdfDay(prev => prev === "" ? String(docDay) : prev);
+
+      // Auto-detect month from document — switch month dropdown if found
+      const detectedMon = MONTHS.find(m => m === normalizeMonth(parsed.document_month)) || null;
+      if(detectedMon) {
+        pendingMonRef.current = detectedMon;
+        setMon(detectedMon);
       }
+
+      // Auto-detect day from document
+      const docDayNum = parsed.document_day;
+      const docDayStr = (docDayNum != null && docDayNum >= 1 && docDayNum <= 31) ? String(docDayNum) : null;
+
+      setPendingResult(parsed);
+
+      // Show modal pre-filled with detected day/month — user confirms before proceeding
+      setPdfDay(docDayStr || autoDay || "");
+      setShowDayModal(true);
     } catch(e) {
       if(cancelledRef.current) return;
       setPendingResult(null);
       setMsg({ ok:false, text:`❌ ${(e as Error).message}` });
-      setShowDayModal(false);
       setPendingPdf(null);
     } finally {
       // BUG-6: don't reset pdfLoading if this request was already cancelled
@@ -393,12 +398,21 @@ export default function App() {
     return { t97:sG(table,TESSABAN,days,"p97"), t3:sG(table,TESSABAN,days,"p3"), o97:sG(table,OBT,days,"p97"), o3:sG(table,OBT,days,"p3"), days:days.length };
   }, [getM]);
 
+  const cancelPdfLoad = useCallback(() => {
+    cancelledRef.current = true;
+    setPendingPdf(null);
+    setPendingResult(null);
+    setPdfQueue([]);
+    setPdfLoading(false);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if(e.key === 'Escape') {
         // BUG-27: close one layer at a time (topmost first)
         if(showDayModal) { cancelledRef.current = true; setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
+        else if(pdfLoading) { cancelPdfLoad(); }
         else if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
         else if(reviewData) setReviewData(null);
         else if(msg) setMsg(null);
@@ -406,7 +420,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showDayModal, confirmDialog, reviewData, msg]);
+  }, [showDayModal, pdfLoading, cancelPdfLoad, confirmDialog, reviewData, msg]);
 
   const restoreBg = isDark ? "#2A4A7A" : "#37474F";
   const tSum97 = sG(cur.table, TESSABAN, cur.days, "p97");
@@ -511,21 +525,16 @@ export default function App() {
                   <div style={{fontWeight:700,fontSize:15,color:T.text,marginBottom:4,letterSpacing:"0.01em"}}>วันที่ในเอกสาร</div>
                   <div style={{fontSize:13,color:T.textMute,marginBottom:4}}>เดือน {mon} — วันที่เท่าไร?</div>
                   {pdfQueue.length>0&&<div style={{fontSize:11,color:T.gold,marginBottom:10,fontWeight:600}}>📂 คิว: เหลืออีก {pdfQueue.length} ไฟล์</div>}
-                  {pdfLoading
-                    ?<div style={{textAlign:'center',padding:'12px 0',color:T.textMute,fontSize:13}}>⏳ Claude กำลังอ่าน...</div>
-                    :pendingResult
-                      ?<div style={{fontSize:11,color:T.msgOkTxt,background:T.msgOkBg,border:`1px solid ${T.msgOkBdr}`,borderRadius:6,padding:'6px 10px',marginBottom:10}}>✅ Claude อ่านสำเร็จ — กรอกวันที่แล้วกดยืนยัน</div>
-                      :<div style={{fontSize:11,color:T.gold,marginBottom:10}}>⏳ รอ Claude อ่าน...</div>
-                  }
+                  <div style={{fontSize:11,color:T.msgOkTxt,background:T.msgOkBg,border:`1px solid ${T.msgOkBdr}`,borderRadius:6,padding:'6px 10px',marginBottom:10}}>✅ Claude อ่านสำเร็จ — กรอกวันที่แล้วกดยืนยัน</div>
                   <input type="text" inputMode="numeric" placeholder="เช่น 1, 15, 30" value={pdfDay}
                     onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,"");if(v===""||( parseInt(v)>=1 && parseInt(v)<=31))setPdfDay(v);}}
-                    onKeyDown={e=>{if(e.key==="Enter"&&pdfDay&&pendingResult)handleDaySubmit(String(parseInt(pdfDay)));}}
+                    onKeyDown={e=>{if(e.key==="Enter"&&pdfDay)handleDaySubmit(String(parseInt(pdfDay)));}}
                     autoFocus
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
                     <button onClick={()=>{ cancelledRef.current = true; setShowDayModal(false); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); setPdfDay(""); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
-                      <button onClick={()=>{if(pdfDay&&pendingResult&&!pdfLoading)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay||!pendingResult||pdfLoading}
-                      style={{flex:2,padding:"9px 0",background:pdfDay&&pendingResult&&!pdfLoading?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay&&pendingResult&&!pdfLoading?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
+                    <button onClick={()=>{if(pdfDay)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay}
+                      style={{flex:2,padding:"9px 0",background:pdfDay?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
                       ยืนยัน
                     </button>
                   </div>
@@ -559,6 +568,7 @@ export default function App() {
               </div>
               {!pdfLoading&&<div style={{fontSize:13,color:T.textFaint,marginBottom:4}}>เดือน{mon} · PDF · PNG · JPG</div>}
               {!pdfLoading&&<div style={{fontSize:12,color:T.textFaint}}>เลือกหลายไฟล์พร้อมกันได้</div>}
+              {pdfLoading&&<button onClick={e=>{e.stopPropagation();cancelPdfLoad();}} style={{marginTop:16,padding:"6px 20px",background:"transparent",color:T.textMute,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>ยกเลิก</button>}
               <input ref={fileRef} type="file" accept=".pdf,image/*" multiple style={{display:"none"}} onChange={e=>handleFilesSelected(e.target.files)}/>
             </div>
 

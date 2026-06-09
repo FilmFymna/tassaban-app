@@ -13,6 +13,7 @@ export interface ExtractResponse {
   total_p3?: number;
   total_amount?: number;
   document_day?: number | null;
+  document_month?: string | null;
   error?: string;
 }
 export interface Msg { ok: boolean; text: string; }

@@ -116,6 +116,27 @@ export function extractDayFromFilename(filename: string): string | null {
   return null;
 }
 
+const MONTH_ALIASES: Record<string, string> = {
+  "ม.ค.":"มกราคม","มค":"มกราคม",
+  "ก.พ.":"กุมภาพันธ์","กพ":"กุมภาพันธ์",
+  "มี.ค.":"มีนาคม","มีค":"มีนาคม",
+  "เม.ย.":"เมษายน","เมย":"เมษายน",
+  "พ.ค.":"พฤษภาคม","พค":"พฤษภาคม",
+  "มิ.ย.":"มิถุนายน","มิย":"มิถุนายน",
+  "ก.ค.":"กรกฎาคม","กค":"กรกฎาคม",
+  "ส.ค.":"สิงหาคม","สค":"สิงหาคม",
+  "ก.ย.":"กันยายน","กย":"กันยายน",
+  "ต.ค.":"ตุลาคม","ตค":"ตุลาคม",
+  "พ.ย.":"พฤศจิกายน","พย":"พฤศจิกายน",
+  "ธ.ค.":"ธันวาคม","ธค":"ธันวาคม",
+};
+
+export function normalizeMonth(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  return MONTH_ALIASES[t] || t;
+}
+
 // Validate number from Claude response — returns "" for invalid/negative
 export function sanitizeNum(v: number | string | null | undefined): string {
   if (v == null || v === "") return "";
