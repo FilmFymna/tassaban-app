@@ -10,6 +10,7 @@ export const sG  = (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3
 export function findOrg(name: string | null | undefined): string | null {
   if(!name) return null;
   const nm = (s: string) => s.replace(/\s+/g,"")
+    .replace("องค์การบริหารส่วนตำบล","").replace("เทศบาลนคร","เมือง")
     .replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง")
     .replace("อบต.","").replace("อบต","");
   const n = nm(name);
@@ -117,31 +118,31 @@ export function extractDayFromFilename(filename: string): string | null {
 }
 
 const MONTH_ALIASES: Record<string, string> = {
-  "ม.ค.":"มกราคม","มค":"มกราคม",
-  "ก.พ.":"กุมภาพันธ์","กพ":"กุมภาพันธ์",
-  "มี.ค.":"มีนาคม","มีค":"มีนาคม",
-  "เม.ย.":"เมษายน","เมย":"เมษายน",
-  "พ.ค.":"พฤษภาคม","พค":"พฤษภาคม",
-  "มิ.ย.":"มิถุนายน","มิย":"มิถุนายน",
-  "ก.ค.":"กรกฎาคม","กค":"กรกฎาคม",
-  "ส.ค.":"สิงหาคม","สค":"สิงหาคม",
-  "ก.ย.":"กันยายน","กย":"กันยายน",
-  "ต.ค.":"ตุลาคม","ตค":"ตุลาคม",
-  "พ.ย.":"พฤศจิกายน","พย":"พฤศจิกายน",
-  "ธ.ค.":"ธันวาคม","ธค":"ธันวาคม",
+  "ม.ค.":"มกราคม","ม.ค":"มกราคม","มค":"มกราคม",
+  "ก.พ.":"กุมภาพันธ์","ก.พ":"กุมภาพันธ์","กพ":"กุมภาพันธ์",
+  "มี.ค.":"มีนาคม","มี.ค":"มีนาคม","มีค":"มีนาคม",
+  "เม.ย.":"เมษายน","เม.ย":"เมษายน","เมย":"เมษายน",
+  "พ.ค.":"พฤษภาคม","พ.ค":"พฤษภาคม","พค":"พฤษภาคม",
+  "มิ.ย.":"มิถุนายน","มิ.ย":"มิถุนายน","มิย":"มิถุนายน",
+  "ก.ค.":"กรกฎาคม","ก.ค":"กรกฎาคม","กค":"กรกฎาคม","กรกฏาคม":"กรกฎาคม",
+  "ส.ค.":"สิงหาคม","ส.ค":"สิงหาคม","สค":"สิงหาคม",
+  "ก.ย.":"กันยายน","ก.ย":"กันยายน","กย":"กันยายน",
+  "ต.ค.":"ตุลาคม","ต.ค":"ตุลาคม","ตค":"ตุลาคม",
+  "พ.ย.":"พฤศจิกายน","พ.ย":"พฤศจิกายน","พย":"พฤศจิกายน",
+  "ธ.ค.":"ธันวาคม","ธ.ค":"ธันวาคม","ธค":"ธันวาคม",
 };
 
 export function normalizeMonth(raw: string | null | undefined): string | null {
   if (!raw) return null;
   // strip whitespace variants: \s covers space/tab/newline, plus ZWS U+200B, ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF
-  const t = raw.replace(/[\s​‌‍﻿]/g, " ").trim().replace(/\s+/g, " ");
+  const t = raw.replace(/[\s\u200B\u200C\u200D\uFEFF]/g, " ").trim().replace(/[\s]+/g, " ");
   return MONTH_ALIASES[t] || t;
 }
 
 // Validate number from Claude response — returns "" for invalid/negative
 export function sanitizeNum(v: number | string | null | undefined): string {
   if (v == null || v === "") return "";
-  const n = parseFloat(String(v));
+  const n = parseFloat(String(v).replace(/,/g, ""));
   if (isNaN(n) || n < 0) return "";
   return String(parseFloat(n.toFixed(2)));
 }

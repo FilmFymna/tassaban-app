@@ -272,6 +272,7 @@ export default function App() {
     } catch(e) {
       if(cancelledRef.current) return;
       setPendingResult(null);
+      setPdfQueue([]);
       setMsg({ ok:false, text:`❌ ${(e as Error).message}` });
       setPendingPdf(null);
     } finally {
@@ -435,7 +436,7 @@ export default function App() {
         if(showDayModal) { cancelledRef.current = true; setShowDayModal(false); setMon(preSwitchMonRef.current); setPdfDay(""); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
         else if(pdfLoading) { cancelPdfLoad(); }
         else if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
-        else if(reviewData) setReviewData(null);
+        else if(reviewData) { setReviewData(null); setPdfQueue([]); setMon(preSwitchMonRef.current); }
         else if(msg) setMsg(null);
       }
     };
