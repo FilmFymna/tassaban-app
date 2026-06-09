@@ -133,7 +133,8 @@ const MONTH_ALIASES: Record<string, string> = {
 
 export function normalizeMonth(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const t = raw.trim();
+  // strip whitespace variants: \s covers space/tab/newline, plus ZWS U+200B, ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF
+  const t = raw.replace(/[\s​‌‍﻿]/g, " ").trim().replace(/\s+/g, " ");
   return MONTH_ALIASES[t] || t;
 }
 
@@ -142,5 +143,5 @@ export function sanitizeNum(v: number | string | null | undefined): string {
   if (v == null || v === "") return "";
   const n = parseFloat(String(v));
   if (isNaN(n) || n < 0) return "";
-  return String(n);
+  return String(parseFloat(n.toFixed(2)));
 }
