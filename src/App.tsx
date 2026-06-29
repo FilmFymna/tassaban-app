@@ -101,12 +101,15 @@ export default function App() {
   const preSwitchMonRef = useRef<string>("ตุลาคม");
   const abortCtrlRef    = useRef<AbortController | null>(null);
   const queueTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // I6
   const isMobile        = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
 
   // BUG-25: wrap in useCallback to avoid unnecessary re-renders
-  const toggleDark = useCallback(() => setIsDark(d => { localStorage.setItem("theme", d?"light":"dark"); return !d; }), []);
+  const toggleDark = useCallback(() => setIsDark(d => !d), []);
+  // M1: persist theme via effect (keeps setIsDark updater pure)
+  useEffect(() => { localStorage.setItem("theme", isDark ? "dark" : "light"); }, [isDark]);
 
   const getM    = useCallback((m: string): MonthData => DB[m]||initM(), [DB]);
   const hasData = useCallback((m: string): boolean => (DB[m]?.days?.length||0)>0, [DB]);
@@ -123,9 +126,14 @@ export default function App() {
 
   // Load DB on fiscal year change
   useEffect(() => {
+    let cancelled = false;
     setReady(false); setDB({}); dirty.current.clear();
-    // BUG-13: show user-visible error when dbLoad fails
-    dbLoad(fiscalYear).then(d=>{ if(Object.keys(d).length) setDB(d); }).catch(e => { console.error(e); setMsg({ ok: false, text: '❌ โหลดข้อมูลไม่สำเร็จ — กรุณา refresh หน้าจอ' }); }).finally(()=>setReady(true));
+    // C2: guard against stale dbLoad results when fiscalYear flips rapidly
+    dbLoad(fiscalYear)
+      .then(d => { if(cancelled) return; if(Object.keys(d).length) setDB(d); })
+      .catch(e => { if(cancelled) return; console.error(e); setMsg({ ok: false, text: '❌ โหลดข้อมูลไม่สำเร็จ — กรุณา refresh หน้าจอ' }); })
+      .finally(() => { if(cancelled) return; setReady(true); });
+    return () => { cancelled = true; };
   }, [fiscalYear]);
 
   // Sync DB to ref for save snapshot
@@ -164,6 +172,9 @@ export default function App() {
   // BUG-9: cleanup queueTimerRef on unmount
   useEffect(() => () => { if(queueTimerRef.current) clearTimeout(queueTimerRef.current); }, []);
 
+  // I6: cleanup savedClearTimerRef on unmount
+  useEffect(() => () => { if(savedClearTimerRef.current) clearTimeout(savedClearTimerRef.current); }, []);
+
   // Item 7: auto-save with retry on error
   useEffect(() => {
     if(!ready) return;
@@ -184,7 +195,10 @@ export default function App() {
         }));
         if(cancelled) return; // BUG-2: don't mutate dirty or call setSaving after cleanup
         dirtySnapshot.forEach(m => dirty.current.delete(m)); // BUG-4: use snapshot, not live dirty
-        setSaving("saved"); setTimeout(() => setSaving(""), 2500);
+        setSaving("saved");
+        // I6: clear any previous "saved" timer before starting a new one
+        if(savedClearTimerRef.current) clearTimeout(savedClearTimerRef.current);
+        savedClearTimerRef.current = setTimeout(() => setSaving(""), 2500);
       } catch(e) {
         if(cancelled) return; // BUG-2
         console.error(e);
@@ -225,13 +239,25 @@ export default function App() {
   }, [mon, setM]);
 
   const startExtract = useCallback(async (file: File) => {
+    // I2: clear any pending queue timer and abort any in-flight prior request before starting fresh
+    if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; }
+    abortCtrlRef.current?.abort();
     cancelledRef.current = false;
     pendingMonRef.current = mon; // BUG-1: capture mon at extract start to avoid stale closure
     preSwitchMonRef.current = mon; // capture for cancel revert (fix-6)
-    abortCtrlRef.current = new AbortController(); // fix-2: real fetch cancellation
+    const localCtrl = new AbortController(); // I4: local controller — finally checks ownership
+    abortCtrlRef.current = localCtrl; // fix-2: real fetch cancellation
     setPendingPdf(file);
     setPendingResult(null);
     const autoDay = extractDayFromFilename(file.name);
+
+    // M5: reject oversize files before reading
+    if(file.size > 7_500_000) {
+      setMsg({ ok:false, text:"❌ ไฟล์ใหญ่เกินไป (สูงสุด 7.5MB)" });
+      setPendingPdf(null);
+      setPdfQueue([]);
+      return;
+    }
 
     setPdfLoading(true);
     try {
@@ -245,7 +271,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64: b64, mimeType: file.type }),
-        signal: abortCtrlRef.current.signal,
+        signal: localCtrl.signal,
       });
       let parsed: ExtractResponse;
       try { parsed = await resp.json(); } catch { throw new Error('API ไม่ตอบสนอง — ตรวจสอบว่า API server รันอยู่'); }
@@ -270,14 +296,16 @@ export default function App() {
       setPdfDay(docDayStr || autoDay || "");
       setShowDayModal(true);
     } catch(e) {
+      // I4: AbortError means a newer request superseded us — leave its state alone
+      if((e as Error)?.name === 'AbortError') return;
       if(cancelledRef.current) return;
       setPendingResult(null);
       setPdfQueue([]);
       setMsg({ ok:false, text:`❌ ${(e as Error).message}` });
       setPendingPdf(null);
     } finally {
-      // BUG-6: don't reset pdfLoading if this request was already cancelled
-      if(!cancelledRef.current) setPdfLoading(false);
+      // BUG-6 / I4: only reset pdfLoading if we're still the active request AND not externally cancelled
+      if(abortCtrlRef.current === localCtrl && !cancelledRef.current) setPdfLoading(false);
     }
   }, [mon]);
 
@@ -322,7 +350,8 @@ export default function App() {
       setConfirmDialog({
         message: `⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`,
         onConfirm: proceed,
-        onCancel: () => { setPendingResult(null); setPendingPdf(null); setPdfQueue([]); },
+        // I1: revert auto-switched month when user cancels the replace prompt
+        onCancel: () => { setPendingResult(null); setPendingPdf(null); setPdfQueue([]); setMon(preSwitchMonRef.current); },
       });
       return;
     }
@@ -351,8 +380,12 @@ export default function App() {
             if(p97 !== "" || p3 !== "") nt[f][dayStr] = { p97, p3 };
           }
         });
+        // M4: sanitize parsed totals (Claude may return invalid/negative)
+        const totP97 = parseFloat(sanitizeNum(parsed.total_p97)) || 0;
+        const totP3  = parseFloat(sanitizeNum(parsed.total_p3))  || 0;
+        const totAmt = parseFloat(sanitizeNum(parsed.total_amount)) || 0;
         const nh = [...c.history.filter(h => h.day !== dayStr),
-          { day:dayStr, total_p97:parsed.total_p97||0, total_p3:parsed.total_p3||0, total_amount:parsed.total_amount||0 }
+          { day:dayStr, total_p97:totP97, total_p3:totP3, total_amount:totAmt }
         ].sort((a,b) => parseInt(a.day)-parseInt(b.day));
         return {...c, days:nd, table:nt, history:nh};
       });
@@ -380,17 +413,24 @@ export default function App() {
         return { fy:cols[0], mon:cols[1], day:cols[2], org:cols[3], p97:cols[4]||'', p3:cols[5]||'' };
       }).filter(r => r.mon && r.day && r.org);
       if(!rows.length) { setMsg({ ok:false, text:'❌ ไม่พบข้อมูลในไฟล์' }); return; }
-      const restoredFy = rows[0].fy || fiscalYear;
+      // M7: require non-empty fiscal year in backup — don't silently fall back to current
+      const restoredFy = rows[0]?.fy?.trim();
+      if(!restoredFy) { setMsg({ ok:false, text:'❌ Backup ไฟล์เสียหาย: ไม่พบปีงบประมาณ' }); return; }
       if(restoredFy !== fiscalYear) {
         setMsg({ok:false, text:`❌ Backup ปี ${restoredFy} ไม่ตรงกับปีปัจจุบัน ${fiscalYear}`});
         return;
       }
+      // I5/I7: pre-validate rows so we can count skipped without double-counting in StrictMode
+      const validRows = rows.map(r => ({...r, _dayNum: parseInt(r.day)}))
+        .filter(r => r._dayNum && r._dayNum >= 1 && r._dayNum <= 31);
+      const skippedInvalid = rows.length - validRows.length;
+      const skippedUnknownOrg = validRows.filter(r => !ALL.includes(r.org)).length;
+      const skipped = skippedInvalid + skippedUnknownOrg;
       setDB(prev => {
         const next: DBState = {...prev};
         const copied = new Set<string>(); // fix-5: track deep-copied months
-        rows.forEach(({ mon:rowMon, day, org, p97, p3 }) => {
-          const dayNum = parseInt(day);
-          if(!dayNum || dayNum < 1 || dayNum > 31) return; // skip invalid rows
+        validRows.forEach(({ mon:rowMon, org, p97, p3, _dayNum }) => {
+          const dayKey = String(_dayNum); // I5: normalize day key (strip leading zeros etc.)
           if(!next[rowMon]) {
             next[rowMon] = { days:[], table:{}, history:[] };
             copied.add(rowMon);
@@ -399,14 +439,19 @@ export default function App() {
             copied.add(rowMon);
           }
           const c = next[rowMon];
-          if(!c.days.includes(day)) c.days = [...c.days, day].sort((a,b)=>parseInt(a)-parseInt(b));
-          ALL.forEach(o => { if(!c.table[o]) c.table[o]={}; if(!c.table[o][day]) c.table[o][day]={p97:'',p3:''}; });
-          if(c.table[org]?.[day] !== undefined) c.table[org][day] = { p97, p3 };
+          if(!c.days.includes(dayKey)) c.days = [...c.days, dayKey];
+          // I5: dedupe + re-sort days
+          c.days = Array.from(new Set(c.days)).sort((a,b)=>parseInt(a)-parseInt(b));
+          ALL.forEach(o => { if(!c.table[o]) c.table[o]={}; if(!c.table[o][dayKey]) c.table[o][dayKey]={p97:'',p3:''}; });
+          if(c.table[org]?.[dayKey] !== undefined) c.table[org][dayKey] = { p97, p3 };
           dirty.current.add(rowMon);
         });
         return next;
       });
-      setMsg({ ok:true, text:`✅ Restore สำเร็จ! ${rows.length} แถว (ปี ${restoredFy})` });
+      const summary = skipped > 0
+        ? `✅ Restore สำเร็จ! ${rows.length} แถว (ข้าม ${skipped} แถวเนื่องจาก org ไม่ตรง, ปี ${restoredFy})`
+        : `✅ Restore สำเร็จ! ${rows.length} แถว (ปี ${restoredFy})`;
+      setMsg({ ok:true, text: summary });
     } catch(e) {
       setMsg({ ok:false, text:`❌ อ่านไฟล์ไม่ได้: ${(e as Error).message}` });
     }
@@ -542,7 +587,7 @@ export default function App() {
 
             {/* Day modal */}
             {showDayModal&&(
-              <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+              <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                 <div style={{background:T.card,borderRadius:10,padding:"24px",width:"100%",maxWidth:340,boxShadow:`0 8px 48px ${T.shadow2}`,border:`1px solid ${T.border}`}}>
                   <div style={{fontWeight:700,fontSize:15,color:T.text,marginBottom:4,letterSpacing:"0.01em"}}>วันที่ในเอกสาร</div>
                   <div style={{fontSize:13,color:T.textMute,marginBottom:4}}>เดือน {mon} — วันที่เท่าไร?</div>
@@ -702,7 +747,7 @@ export default function App() {
 
       {/* Confirm Modal */}
       {confirmDialog&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:T.card,borderRadius:10,padding:'24px',width:'100%',maxWidth:360,boxShadow:`0 8px 48px ${T.shadow2}`,border:`1px solid ${T.border}`}}>
             <div style={{fontSize:14,fontWeight:500,color:T.text,marginBottom:20,lineHeight:1.7,whiteSpace:'pre-line'}}>{confirmDialog.message}</div>
             <div style={{display:'flex',gap:8}}>
@@ -715,7 +760,7 @@ export default function App() {
 
       {/* Review Modal */}
       {reviewData&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+        <div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
           <div style={{background:T.card,borderRadius:10,padding:'24px',width:'100%',maxWidth:600,boxShadow:`0 8px 48px ${T.shadow2}`,maxHeight:'90vh',display:'flex',flexDirection:'column',border:`1px solid ${T.border}`}}>
             <div style={{fontWeight:700,fontSize:15,color:T.text,marginBottom:3,letterSpacing:"0.01em"}}>ตรวจสอบข้อมูลที่ Claude อ่าน</div>
             <div style={{fontSize:12,color:T.textMute,marginBottom:14}}>วันที่ {reviewData.dayStr} เดือน{reviewData.activeMon} — กรุณาตรวจสอบก่อนบันทึก</div>

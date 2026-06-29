@@ -7,27 +7,56 @@ export const sR  = (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3')
 export const sD  = (tbl: OrgTable, day: string, lst: string[], f: 'p97' | 'p3'): number  => lst.reduce((s,o)=>s+(parseFloat(tbl[o]?.[day]?.[f])||0),0);
 export const sG  = (tbl: OrgTable, lst: string[], days: string[], f: 'p97' | 'p3'): number => lst.reduce((s,o)=>s+sR(tbl,o,days,f),0);
 
+// Longest common substring length between two strings
+function lcsLength(a: string, b: string): number {
+  if(!a || !b) return 0;
+  const m = a.length, n = b.length;
+  let best = 0;
+  // rolling 1-D table is enough since we only need max length
+  let prev = new Array<number>(n + 1).fill(0);
+  for(let i = 1; i <= m; i++) {
+    const curr = new Array<number>(n + 1).fill(0);
+    for(let j = 1; j <= n; j++) {
+      if(a[i-1] === b[j-1]) {
+        curr[j] = prev[j-1] + 1;
+        if(curr[j] > best) best = curr[j];
+      }
+    }
+    prev = curr;
+  }
+  return best;
+}
+
 export function findOrg(name: string | null | undefined): string | null {
   if(!name) return null;
+  // I8: strip leading list-noise (e.g. "1. ", "12) ") so OCR'd numbered lists match
+  const cleaned = name.replace(/^[\s\d\.\)\-:]+/, "");
   const nm = (s: string) => s.replace(/\s+/g,"")
     .replace("องค์การบริหารส่วนตำบล","").replace("เทศบาลนคร","เมือง")
     .replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง")
     .replace("อบต.","").replace("อบต","");
-  const n = nm(name);
+  const n = nm(cleaned);
   if(!n) return null;
-  // exact match first
+  // exact-match-on-normalized-name is primary
   const exact = ALL.find(o => nm(o) === n);
-  if (exact) return exact;
-  // BUG-12: fallback substring — require min 3 chars, longer string must contain shorter,
-  // and the shorter string must be ≥60% the length of the longer to prevent false positives
-  return ALL.find(o => {
+  if(exact) return exact;
+  if(n.length < 3) return null;
+  // Fallback: score every org by LCS-length / max-length. To avoid the old substring+ratio
+  // false positives (e.g. "สว่าง" matching "โคกสว่าง"), require:
+  //   1. best score >= 0.6, AND
+  //   2. best beats second-best by margin >= 0.15 (disambiguation guard — return null on ties)
+  let best = { org: "", score: 0 };
+  let second = { org: "", score: 0 };
+  for(const o of ALL) {
     const m = nm(o);
-    if(m.length < 3 || n.length < 3) return false;
-    const longer = m.length > n.length ? m : n;
-    const shorter = m.length > n.length ? n : m;
-    if(shorter.length / longer.length < 0.6) return false;
-    return longer.includes(shorter);
-  }) || null;
+    if(m.length < 3) continue;
+    const score = lcsLength(m, n) / Math.max(m.length, n.length);
+    if(score > best.score) { second = best; best = { org: o, score }; }
+    else if(score > second.score) { second = { org: o, score }; }
+  }
+  if(best.score < 0.6) return null;
+  if(best.score - second.score < 0.15) return null; // ambiguous — bail
+  return best.org;
 }
 
 export const initM = (): MonthData => ({ days:[], table:{}, history:[] });
@@ -139,10 +168,11 @@ export function normalizeMonth(raw: string | null | undefined): string | null {
   return MONTH_ALIASES[t] || t;
 }
 
-// Validate number from Claude response — returns "" for invalid/negative
+// Validate number from Claude response — returns "" for invalid/negative/zero
 export function sanitizeNum(v: number | string | null | undefined): string {
   if (v == null || v === "") return "";
   const n = parseFloat(String(v).replace(/,/g, ""));
   if (isNaN(n) || n < 0) return "";
+  if (n === 0) return ""; // M3: keep empty cells empty
   return String(parseFloat(n.toFixed(2)));
 }
