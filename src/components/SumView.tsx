@@ -5,8 +5,8 @@ import { TESSABAN, OBT, ALL } from '../data/orgs';
 export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile,prevMSum,fiscalYear}: SumViewProps){
   const th=(w: number,l=false,bg?: string): React.CSSProperties=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
   const td: React.CSSProperties={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
-  const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
-  const prevYr=MONTHS.reduce((a,m)=>{const s=prevMSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
+  const yr=useMemo(()=>MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0}),[MONTHS,mSum]);
+  const prevYr=useMemo(()=>MONTHS.reduce((a,m)=>{const s=prevMSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0}),[MONTHS,prevMSum]);
   const curTotal=yr.t97+yr.t3+yr.o97+yr.o3;
   const prevTotal=prevYr.t97+prevYr.t3+prevYr.o97+prevYr.o3;
   const delta=curTotal-prevTotal;

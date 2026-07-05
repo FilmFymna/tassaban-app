@@ -542,7 +542,7 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
           {saving&&<div onClick={saving==="error"?triggerRetry:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
           {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
-          <select value={fiscalYear} onChange={e=>{setFiscalYear(e.target.value);setMon("ตุลาคม");}}
+          <select value={fiscalYear} onChange={e=>{const newFy=e.target.value;setFiscalYear(newFy);setMon(newFy===currentFiscalYear()?currentMonth():"ตุลาคม");}}
             style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
             {/* BUG-15: range always includes both current fiscal year and selected year */}
             {(() => { const curFY = parseInt(currentFiscalYear()); const selFY = parseInt(fiscalYear); const minFY = Math.min(curFY - 2, selFY - 2); return Array.from({length:6},(_,i)=>minFY+i); })().map(y=><option key={y} value={String(y)} style={{color:"#000",background:"#1e293b"}}>ปี {y}</option>)}
@@ -745,10 +745,10 @@ export default function App() {
                 <div style={{marginTop:12,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
                   <SCard label="รวมเทศบาล" p97={tSum97} p3={tSum3} color={T.blue} gold={T.totGold}/>
                   <SCard label="รวม อบต." p97={oSum97} p3={oSum3} color={T.green} gold={T.totGold}/>
-                  <div style={{background:isDark?"#0D1117":T.card3,borderRadius:8,padding:"12px 14px"}}>
-                    <div style={{fontSize:10,color:T.textFaint,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
-                    <div style={{fontSize:22,fontWeight:800,color:T.gold,letterSpacing:"-0.02em"}}>{(aSum97+aSum3).toFixed(2)}</div>
-                    <div style={{fontSize:10,color:T.textMute,marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
+                  <div style={{background:T.totRow,borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.85)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ยอดรวมเดือน{mon}</div>
+                    <div style={{fontSize:22,fontWeight:800,color:T.totGold,letterSpacing:"-0.02em"}}>{(aSum97+aSum3).toFixed(2)}</div>
+                    <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.75)",marginTop:3}}>97%: {aSum97.toFixed(2)} · 3%: {aSum3.toFixed(2)}</div>
                   </div>
                 </div>
               </>}
