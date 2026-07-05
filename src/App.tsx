@@ -29,6 +29,8 @@ const currentFiscalYear = (): string => {
   return m >= 10 ? String(y+1) : String(y);
 };
 
+const currentMonth = (): string => MONTHS[(new Date().getMonth() + 3) % 12];
+
 async function dbLoad(fy: string): Promise<DBState> {
   const {data,error} = await sb.from("monthly_data").select("*").like("month", `${fy}_%`);
   if(error) throw error;
@@ -70,7 +72,7 @@ export default function App() {
   const [fiscalYear,  setFiscalYear]  = useState(currentFiscalYear);
   const [mainTab,     setMainTab]     = useState("monthly");
   const [subTab,      setSubTab]      = useState("import");
-  const [mon,         setMon]         = useState("ตุลาคม");
+  const [mon,         setMon]         = useState(currentMonth);
   const [DB,          setDB]          = useState<DBState>({});
   const [msg,         setMsg]         = useState<Msg | null>(null);
   const [mDay,        setMDay]        = useState("");
@@ -97,8 +99,8 @@ export default function App() {
   const undoRef         = useRef<{ mon: string; day: string; data: MonthData } | null>(null);
   const undoTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef    = useRef<boolean>(false);
-  const pendingMonRef   = useRef<string>("ตุลาคม");
-  const preSwitchMonRef = useRef<string>("ตุลาคม");
+  const pendingMonRef   = useRef<string>(currentMonth());
+  const preSwitchMonRef = useRef<string>(currentMonth());
   const abortCtrlRef    = useRef<AbortController | null>(null);
   const queueTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // I6
