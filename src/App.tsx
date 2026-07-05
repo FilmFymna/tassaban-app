@@ -74,6 +74,7 @@ export default function App() {
   const [subTab,      setSubTab]      = useState("import");
   const [mon,         setMon]         = useState(currentMonth);
   const [DB,          setDB]          = useState<DBState>({});
+  const [prevYearDB,  setPrevYearDB]  = useState<DBState>({});
   const [msg,         setMsg]         = useState<Msg | null>(null);
   const [mDay,        setMDay]        = useState("");
 
@@ -129,12 +130,17 @@ export default function App() {
   // Load DB on fiscal year change
   useEffect(() => {
     let cancelled = false;
-    setReady(false); setDB({}); dirty.current.clear();
+    setReady(false); setDB({}); setPrevYearDB({}); dirty.current.clear();
     // C2: guard against stale dbLoad results when fiscalYear flips rapidly
     dbLoad(fiscalYear)
       .then(d => { if(cancelled) return; if(Object.keys(d).length) setDB(d); })
       .catch(e => { if(cancelled) return; console.error(e); setMsg({ ok: false, text: '❌ โหลดข้อมูลไม่สำเร็จ — กรุณา refresh หน้าจอ' }); })
       .finally(() => { if(cancelled) return; setReady(true); });
+    // Load previous fiscal year for year-over-year comparison (best-effort, silent on error)
+    const prevFy = String(parseInt(fiscalYear) - 1);
+    dbLoad(prevFy)
+      .then(d => { if(cancelled) return; setPrevYearDB(d); })
+      .catch(e => { if(cancelled) return; console.error('prev year load failed', e); });
     return () => { cancelled = true; };
   }, [fiscalYear]);
 
@@ -464,6 +470,12 @@ export default function App() {
     return { t97:sG(table,TESSABAN,days,"p97"), t3:sG(table,TESSABAN,days,"p3"), o97:sG(table,OBT,days,"p97"), o3:sG(table,OBT,days,"p3"), days:days.length };
   }, [getM]);
 
+  const prevMSum = useCallback((m: string) => {
+    const md = prevYearDB[m] || initM();
+    const {days,table} = md;
+    return { t97:sG(table,TESSABAN,days,"p97"), t3:sG(table,TESSABAN,days,"p3"), o97:sG(table,OBT,days,"p97"), o3:sG(table,OBT,days,"p3"), days:days.length };
+  }, [prevYearDB]);
+
   const cancelPdfLoad = useCallback(() => {
     abortCtrlRef.current?.abort(); // fix-2: actually cancel in-flight HTTP request
     cancelledRef.current = true;
@@ -743,7 +755,7 @@ export default function App() {
           </div>}
         </div>}
 
-        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} T={T} fmt={fmt} sR={sR} isMobile={isMobile}/>}
+        {mainTab==="summary"&&<SumView MONTHS={MONTHS} mSum={mSum} hasData={hasData} setMon={setMon} setMainTab={setMainTab} setSubTab={setSubTab} getM={getM} T={T} fmt={fmt} sR={sR} isMobile={isMobile} prevMSum={prevMSum} fiscalYear={fiscalYear}/>}
         {mainTab==="chart"&&<ChartView MONTHS={MONTHS} mSum={mSum} getM={getM} T={T} fmt={fmt} sR={sR} sG={sG} isMobile={isMobile}/>}
       </>}
 

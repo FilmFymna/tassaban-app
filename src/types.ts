@@ -49,6 +49,7 @@ export interface SumViewProps {
   setMon: (m: string) => void; setMainTab: (tab: string) => void; setSubTab: (tab: string) => void;
   getM: (m: string) => MonthData; T: Theme; fmt: (n: number | null | undefined) => string;
   sR: (tbl: OrgTable, org: string, days: string[], f: 'p97' | 'p3') => number; isMobile: boolean;
+  prevMSum: (m: string) => MonthSummary; fiscalYear: string;
 }
 
 export interface ChartViewProps {

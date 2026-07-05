@@ -2,10 +2,19 @@ import React, { useMemo } from 'react';
 import type { SumViewProps } from '../types';
 import { TESSABAN, OBT, ALL } from '../data/orgs';
 
-export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile}: SumViewProps){
+export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab,getM,T,fmt,sR,isMobile,prevMSum,fiscalYear}: SumViewProps){
   const th=(w: number,l=false,bg?: string): React.CSSProperties=>({padding:"6px 8px",textAlign:l?"left":"center",fontWeight:700,fontSize:11,color:T.tblHeadTxt,borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,minWidth:w,whiteSpace:"nowrap",...(bg?{background:bg}:{background:T.card3})});
   const td: React.CSSProperties={borderBottom:`1px solid ${T.border}`,borderRight:`1px solid ${T.border}`,verticalAlign:"middle"};
   const yr=MONTHS.reduce((a,m)=>{const s=mSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
+  const prevYr=MONTHS.reduce((a,m)=>{const s=prevMSum(m);return{t97:a.t97+s.t97,t3:a.t3+s.t3,o97:a.o97+s.o97,o3:a.o3+s.o3};},{t97:0,t3:0,o97:0,o3:0});
+  const curTotal=yr.t97+yr.t3+yr.o97+yr.o3;
+  const prevTotal=prevYr.t97+prevYr.t3+prevYr.o97+prevYr.o3;
+  const delta=curTotal-prevTotal;
+  const deltaPct=prevTotal>0?(delta/prevTotal)*100:null;
+  const prevFy=String(parseInt(fiscalYear)-1);
+  const hasPrev=prevTotal>0;
+  const deltaColor=delta>=0?"#16a34a":"#dc2626";
+  const deltaSign=delta>=0?"▲":"▼";
   const orgTotals = useMemo(() => {
     const m: Record<string,{t97:number,t3:number}> = {};
     ALL.forEach(org => {
@@ -20,6 +29,28 @@ export default function SumView({MONTHS,mSum,hasData,setMon,setMainTab,setSubTab
   return(
     <div style={{padding:isMobile?"8px 10px":"14px 16px"}}>
       <div style={{fontWeight:800,fontSize:17,color:T.blue,marginBottom:14}}>📊 สรุปยอดรายปี</div>
+      {hasPrev&&(
+        <div style={{background:T.card,borderRadius:12,padding:isMobile?"12px 14px":"14px 18px",marginBottom:18,boxShadow:`0 2px 8px ${T.shadow}`,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20,alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:11,color:T.textMute,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ปีงบ {fiscalYear} (ปัจจุบัน)</div>
+            <div style={{fontSize:isMobile?18:22,fontWeight:900,color:T.blue,fontVariantNumeric:"tabular-nums"}}>{fmt(curTotal)}</div>
+            <div style={{fontSize:11,color:T.textMute,marginTop:3,display:"flex",gap:8}}><span style={{color:T.blue}}>ทบ {fmt(yr.t97+yr.t3)}</span><span style={{color:T.green}}>อบต {fmt(yr.o97+yr.o3)}</span></div>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:T.textMute,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>ปีงบ {prevFy} (ปีก่อน)</div>
+            <div style={{fontSize:isMobile?18:22,fontWeight:900,color:T.textMed,fontVariantNumeric:"tabular-nums"}}>{fmt(prevTotal)}</div>
+            <div style={{fontSize:11,color:T.textMute,marginTop:3,display:"flex",gap:8}}><span>ทบ {fmt(prevYr.t97+prevYr.t3)}</span><span>อบต {fmt(prevYr.o97+prevYr.o3)}</span></div>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:T.textMute,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>เทียบปีก่อน</div>
+            <div style={{fontSize:isMobile?18:22,fontWeight:900,color:deltaColor,fontVariantNumeric:"tabular-nums",display:"flex",alignItems:"baseline",gap:6}}>
+              <span style={{fontSize:isMobile?14:18}}>{deltaSign}</span>
+              <span>{fmt(Math.abs(delta))}</span>
+            </div>
+            {deltaPct!==null&&<div style={{fontSize:11,color:deltaColor,marginTop:3,fontWeight:700}}>{delta>=0?"+":"-"}{Math.abs(deltaPct).toFixed(1)}%</div>}
+          </div>
+        </div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8,marginBottom:18}}>
         {MONTHS.map(m=>{const s=mSum(m);const tot=s.t97+s.t3+s.o97+s.o3;return(
           <div key={m} onClick={()=>go(m)} style={{background:hasData(m)?T.card:T.card2,borderRadius:10,padding:"12px 14px",cursor:"pointer",boxShadow:`0 1px 5px ${T.shadow}`,border:`1.5px solid ${hasData(m)?T.blue:T.border}`}}>
