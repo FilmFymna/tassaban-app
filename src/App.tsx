@@ -451,7 +451,7 @@ export default function App() {
           // I5: dedupe + re-sort days
           c.days = Array.from(new Set(c.days)).sort((a,b)=>parseInt(a)-parseInt(b));
           ALL.forEach(o => { if(!c.table[o]) c.table[o]={}; if(!c.table[o][dayKey]) c.table[o][dayKey]={p97:'',p3:''}; });
-          if(c.table[org]?.[dayKey] !== undefined) c.table[org][dayKey] = { p97, p3 };
+          if(c.table[org]?.[dayKey] !== undefined) c.table[org][dayKey] = { p97: sanitizeNum(p97), p3: sanitizeNum(p3) };
           dirty.current.add(rowMon);
         });
         return next;
@@ -542,7 +542,13 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
           {saving&&<div onClick={saving==="error"?triggerRetry:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
           {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
-          <select value={fiscalYear} onChange={e=>{const newFy=e.target.value;setFiscalYear(newFy);setMon(newFy===currentFiscalYear()?currentMonth():"ตุลาคม");}}
+          <select value={fiscalYear} onChange={e=>{
+              const newFy=e.target.value;
+              const doSwitch=()=>{setFiscalYear(newFy);setMon(newFy===currentFiscalYear()?currentMonth():"ตุลาคม");};
+              if(dirty.current.size>0||savingRef.current==="saving"||savingRef.current==="error") {
+                showConfirm(`⚠️ มีข้อมูลค้างที่ยังไม่บันทึก\nถ้าเปลี่ยนปีตอนนี้ ข้อมูลจะหาย ต้องการเปลี่ยนมั้ย?`, doSwitch);
+              } else { doSwitch(); }
+            }}
             style={{padding:"4px 6px",height:32,borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",fontFamily:"inherit",fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.07)",color:"#fff",cursor:"pointer"}}>
             {/* BUG-15: range always includes both current fiscal year and selected year */}
             {(() => { const curFY = parseInt(currentFiscalYear()); const selFY = parseInt(fiscalYear); const minFY = Math.min(curFY - 2, selFY - 2); return Array.from({length:6},(_,i)=>minFY+i); })().map(y=><option key={y} value={String(y)} style={{color:"#000",background:"#1e293b"}}>ปี {y}</option>)}

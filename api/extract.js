@@ -16,7 +16,7 @@ ${ORGS.join("\n")}
 export default async function handler(req, res) {
   // CORS headers — BUG-5: never fall back to wildcard; BUG-26: only set if not already set by api-server.js
   if (!res.getHeader('Access-Control-Allow-Origin')) {
-    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || 'https://tassaban-app1.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || 'https://tassaban-app.vercel.app');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   }
