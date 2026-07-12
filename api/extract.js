@@ -40,39 +40,77 @@ export default async function handler(req, res) {
     if (!KEY) return res.status(500).json({ error: 'No API key' });
 
     const isPdf = mimeType === 'application/pdf';
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: AbortSignal.timeout(25000),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': KEY,
-        'anthropic-version': '2023-06-01',
-        ...(isPdf ? {'anthropic-beta':'pdfs-2024-09-25'} : {}),
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: [
-            isPdf
-              ? { type: 'document', source: { type: 'base64', media_type: mimeType, data: fileBase64 } }
-              : { type: 'image',    source: { type: 'base64', media_type: mimeType, data: fileBase64 } },
-            { type: 'text', text: PROMPT },
-          ],
-        }],
-      }),
-    });
+    // Chain client abort → Anthropic call so a canceled upload doesn't burn tokens
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 25000);
+    const onClientClose = () => ctrl.abort();
+    req.on('close', onClientClose);
+    let r;
+    try {
+      r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': KEY,
+          'anthropic-version': '2023-06-01',
+          ...(isPdf ? {'anthropic-beta':'pdfs-2024-09-25'} : {}),
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              isPdf
+                ? { type: 'document', source: { type: 'base64', media_type: mimeType, data: fileBase64 } }
+                : { type: 'image',    source: { type: 'base64', media_type: mimeType, data: fileBase64 } },
+              { type: 'text', text: PROMPT },
+            ],
+          }],
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      req.off?.('close', onClientClose);
+    }
 
-    if (!r.ok) { const e = await r.text(); return res.status(502).json({ error: `Anthropic API error ${r.status}: ${e.slice(0, 300)}` }); }
+    if (!r.ok) {
+      const e = await r.text();
+      // Log full body server-side but don't forward Anthropic's raw error (may hint at key/auth issues)
+      console.error(`Anthropic ${r.status}:`, e.slice(0, 500));
+      return res.status(502).json({ error: 'AI service unavailable — กรุณาลองใหม่' });
+    }
     const data = await r.json();
     const text = data.content?.[0]?.text || '';
-    // BUG-17: use regex to capture the largest valid JSON object rather than first/last brace
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? jsonMatch[0] : null;
+    // Prefer JSON inside ```json``` fence; fall back to a balanced-brace scan.
+    // Old /\{[\s\S]*\}/ was greedy and grabbed the outer span across any prose braces.
+    let jsonStr = null;
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+    if (!jsonStr) {
+      const start = text.indexOf('{');
+      if (start !== -1) {
+        // Track string state so a `}` inside a JSON string value doesn't prematurely close the object.
+        let depth = 0, end = -1, inStr = false, esc = false;
+        for (let i = start; i < text.length; i++) {
+          const c = text[i];
+          if (esc) { esc = false; continue; }
+          if (inStr) { if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+          if (c === '"') inStr = true;
+          else if (c === '{') depth++;
+          else if (c === '}') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end !== -1) jsonStr = text.slice(start, end + 1);
+      }
+    }
     if (!jsonStr) return res.status(500).json({ error: 'ไม่พบ JSON', raw: text.slice(0, 200) });
     let parsed;
     try { parsed = JSON.parse(jsonStr); } catch (e) { return res.status(500).json({ error: 'JSON parse failed', raw: jsonStr.slice(0, 200) }); }
     return res.status(200).json(parsed);
-  } catch (e) { return res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (e?.name === 'AbortError') return; // client hung up or timeout — no response needed
+    console.error('extract handler error:', e);
+    return res.status(500).json({ error: e.message || 'Internal error' });
+  }
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { MTableProps } from '../types';
+import { sanitizeInput } from '../utils/helpers';
 
 const MTable = React.memo(function MTable({title,list,days,table,setCell,T,sR,sD,sG,n2}: MTableProps){
   const col = title==="เทศบาล" ? T.blue : T.green;
@@ -39,10 +40,10 @@ const MTable = React.memo(function MTable({title,list,days,table,setCell,T,sR,sD
                   <td style={{padding:"3px 8px",borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,fontWeight:500,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize:12}}>{org}</td>
                   {days.map(d=><React.Fragment key={d}>
                     <td style={{padding:2,borderBottom:`1px solid ${T.border}`,background:T.p97Bg}}>
-                      <input type="text" inputMode="decimal" value={table[org]?.[d]?.p97??""} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,"");const parts=raw.split(".");const val=parts.length>2?parts[0]+"."+parts.slice(1).join(""):raw;setCell(org,d,"p97",val);}} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p97Num||col,fontWeight:600,boxSizing:"border-box"}}/>
+                      <input type="text" inputMode="decimal" value={table[org]?.[d]?.p97??""} onChange={e=>setCell(org,d,"p97",sanitizeInput(e.target.value))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p97Num||col,fontWeight:600,boxSizing:"border-box"}}/>
                     </td>
                     <td style={{padding:2,borderBottom:`1px solid ${T.border}`,borderRight:`2px solid ${T.borderHeavy}`,background:T.p3Bg}}>
-                      <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,"");const parts=raw.split(".");const val=parts.length>2?parts[0]+"."+parts.slice(1).join(""):raw;setCell(org,d,"p3",val);}} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p3Num||T.textMute,boxSizing:"border-box"}}/>
+                      <input type="text" inputMode="decimal" value={table[org]?.[d]?.p3??""} onChange={e=>setCell(org,d,"p3",sanitizeInput(e.target.value))} style={{width:"100%",border:"none",background:"transparent",textAlign:"right",padding:"3px 4px",fontFamily:"inherit",fontSize:11.5,outline:"none",color:T.p3Num||T.textMute,boxSizing:"border-box"}}/>
                     </td>
                   </React.Fragment>)}
                   <td style={{padding:"3px 6px",borderBottom:`1px solid ${T.border}`,textAlign:"right",fontWeight:700,color:T.p97Num||col,background:T.p97Sum}}>{n2(r97)}</td>

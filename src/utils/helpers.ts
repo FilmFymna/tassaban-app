@@ -90,7 +90,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-export function exportCSV(mon: string, days: string[], table: OrgTable): void {
+export function exportCSV(fiscalYear: string, mon: string, days: string[], table: OrgTable): void {
   const rows: (string | number)[][] = [];
   const h1: (string | number)[] = ["หน่วยงาน"];
   const h2: (string | number)[] = [""];
@@ -117,10 +117,10 @@ export function exportCSV(mon: string, days: string[], table: OrgTable): void {
   tot.push(n2(g97), n2(g3), n2(g97+g3));
   rows.push(tot);
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${mon}.csv`);
+  downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${fiscalYear}_${mon}.csv`);
 }
 
-export function exportBackup(DB: DBState, fiscalYear: string): void {
+export function exportBackup(DB: DBState, fiscalYear: string): boolean {
   const rows: (string | number)[][] = [["ปีงบประมาณ","เดือน","วันที่","หน่วยงาน","97%","3%"]];
   Object.entries(DB).forEach(([mon, md]) => {
     (md.days||[]).forEach(day => {
@@ -130,13 +130,19 @@ export function exportBackup(DB: DBState, fiscalYear: string): void {
       });
     });
   });
+  // Guard empty backups so the caller can surface a message instead of a silent header-only file
+  if (rows.length === 1) return false;
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
   downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `backup_tessaban_${fiscalYear}_${new Date().toISOString().slice(0,10)}.csv`);
+  return true;
 }
 
 // ดึงวันที่จากชื่อไฟล์ เช่น "15.pdf", "2025-01-15.pdf", "day15.pdf"
 export function extractDayFromFilename(filename: string): string | null {
   const base = filename.replace(/\.[^.]+$/, "");
+  // Reject bare 4-digit year (e.g. "2025.pdf") — pattern 2's trailing anchor would otherwise
+  // capture the last 2 digits ("25") as a day.
+  if (/^\d{4}$/.test(base)) return null;
   const patterns = [
     /\d{4}[-_]?\d{2}[-_]?(\d{2})$/,   // 2025-01-15 หรือ 20250115
     /(?:^|[-_\s])(\d{1,2})$/,           // ลงท้ายด้วยเลข: "15", "day-15"
@@ -166,13 +172,40 @@ const MONTH_ALIASES: Record<string, string> = {
   "ต.ค.":"ตุลาคม","ต.ค":"ตุลาคม","ตค":"ตุลาคม",
   "พ.ย.":"พฤศจิกายน","พ.ย":"พฤศจิกายน","พย":"พฤศจิกายน",
   "ธ.ค.":"ธันวาคม","ธ.ค":"ธันวาคม","ธค":"ธันวาคม",
+  // numeric variants — Claude may return "10" or "01" for document_month
+  "1":"มกราคม","01":"มกราคม",
+  "2":"กุมภาพันธ์","02":"กุมภาพันธ์",
+  "3":"มีนาคม","03":"มีนาคม",
+  "4":"เมษายน","04":"เมษายน",
+  "5":"พฤษภาคม","05":"พฤษภาคม",
+  "6":"มิถุนายน","06":"มิถุนายน",
+  "7":"กรกฎาคม","07":"กรกฎาคม",
+  "8":"สิงหาคม","08":"สิงหาคม",
+  "9":"กันยายน","09":"กันยายน",
+  "10":"ตุลาคม","11":"พฤศจิกายน","12":"ธันวาคม",
 };
 
 export function normalizeMonth(raw: string | null | undefined): string | null {
   if (!raw) return null;
   // strip whitespace variants: \s covers space/tab/newline, plus ZWS U+200B, ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF
-  const t = raw.replace(/[\s\u200B\u200C\u200D\uFEFF]/g, " ").trim().replace(/[\s]+/g, " ");
+  let t = raw.replace(/[\s\u200B\u200C\u200D\uFEFF]/g, " ").trim().replace(/[\s]+/g, " ");
+  // Transliterate Thai digits so numeric aliases apply (e.g. \u0E51\u0E50 \u2192 10 \u2192 \u0E15\u0E38\u0E25\u0E32\u0E04\u0E21)
+  t = t.replace(/[\u0E50-\u0E59]/g, d => String(d.charCodeAt(0) - 0x0E50));
   return MONTH_ALIASES[t] || t;
+}
+
+// Normalize a user-typed / pasted cell value into a well-formed decimal string
+// - transliterates Thai digits (๐-๙) → Arabic (0-9) so Thai-IME users don't lose input
+// - strips anything that isn't a digit or dot (drops sign, commas, spaces)
+// - keeps only the first dot (paste of "1.2.3" → "1.23", not silently accepting the typo)
+// - promotes a leading dot to "0." so ".5" parses as 0.5 instead of storing a literal "."
+export function sanitizeInput(raw: string): string {
+  let s = raw.replace(/[๐-๙]/g, d => String(d.charCodeAt(0) - 0x0E50));
+  s = s.replace(/[^0-9.]/g, "");
+  const firstDot = s.indexOf(".");
+  if (firstDot !== -1) s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+  if (s.startsWith(".")) s = "0" + s;
+  return s;
 }
 
 // Validate number from Claude response — returns "" for invalid/negative/zero

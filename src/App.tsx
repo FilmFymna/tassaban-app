@@ -134,6 +134,13 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     setReady(false); setDB({}); setPrevYearDB({}); dirty.current.clear();
+    // Abort any in-flight PDF import and clear its state — otherwise a Save from an open
+    // review/day modal would write into the NEW fiscal year using OLD-FY month refs.
+    abortCtrlRef.current?.abort();
+    cancelledRef.current = true;
+    if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; }
+    setPdfQueue([]); setPendingResult(null); setPendingPdf(null); setReviewData(null);
+    setShowDayModal(false); setPdfLoading(false); setPdfDay("");
     // C2: guard against stale dbLoad results when fiscalYear flips rapidly
     dbLoad(fiscalYear)
       .then(d => { if(cancelled) return; if(Object.keys(d).length) setDB(d); })
@@ -309,8 +316,11 @@ export default function App() {
       }
 
       // Auto-detect day from document
-      const docDayNum = parsed.document_day;
-      const docDayStr = (docDayNum != null && docDayNum >= 1 && docDayNum <= 31) ? String(docDayNum) : null;
+      // Normalize via Number() then String() so "03" and 3 both collapse to "3" —
+      // otherwise a "03" from Claude bypasses the replace prompt and stores a duplicate day
+      // alongside an existing "3" entry.
+      const docDayNum = Number(parsed.document_day);
+      const docDayStr = (Number.isInteger(docDayNum) && docDayNum >= 1 && docDayNum <= 31) ? String(docDayNum) : null;
 
       setPendingResult(parsed);
 
@@ -587,7 +597,7 @@ export default function App() {
         </div>}
         <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
           {saving&&<div onClick={saving==="error"?triggerRetry:undefined} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:saving==="saved"?"rgba(74,222,128,0.15)":saving==="error"?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.1)",color:saving==="saved"?"#4ADE80":saving==="error"?"#F87171":"rgba(255,255,255,0.6)",border:`1px solid ${saving==="saved"?"rgba(74,222,128,0.3)":saving==="error"?"rgba(248,113,113,0.3)":"rgba(255,255,255,0.15)"}`,whiteSpace:"nowrap",cursor:saving==="error"?"pointer":"default"}}>{saving==="saving"?"บันทึก...":saving==="saved"?"บันทึกแล้ว":"⚠ บันทึกไม่ได้ (แตะเพื่อลองใหม่)"}</div>}
-          {!isMobile&&<button onClick={()=>exportBackup(DB,fiscalYear)} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
+          {!isMobile&&<button onClick={()=>{ if(!exportBackup(DB,fiscalYear)) setMsg({ok:false,text:"ยังไม่มีข้อมูลให้สำรอง"}); }} style={{padding:"4px 10px",height:32,border:"1px solid rgba(255,255,255,0.15)",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:11,background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.6)"}} title="Backup">💾 สำรอง</button>}
           <select value={fiscalYear} onChange={e=>{
               const newFy=e.target.value;
               const doSwitch=()=>{setFiscalYear(newFy);setMon(newFy===currentFiscalYear()?currentMonth():"ตุลาคม");};
@@ -768,7 +778,7 @@ export default function App() {
               <span style={{fontSize:12,color:T.textFaint,marginLeft:6}}>{cur.days.length} วัน</span>
               <div style={{marginLeft:"auto",display:"flex",gap:6}}>
                 {cur.days.length>0&&<>
-                  <button onClick={()=>exportCSV(mon,cur.days,cur.table)} style={{padding:"5px 12px",background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>Export CSV</button>
+                  <button onClick={()=>exportCSV(fiscalYear,mon,cur.days,cur.table)} style={{padding:"5px 12px",background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>Export CSV</button>
                   <button onClick={()=>window.print()} style={{padding:"5px 12px",background:"transparent",color:T.textMed,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>พิมพ์</button>
                 </>}
               </div>
@@ -880,7 +890,7 @@ export default function App() {
       {/* Mobile bottom nav */}
       {isMobile&&<nav className="no-print" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:isDark?"#0D1B3E":"#1565C0",borderTop:isDark?"1px solid #1E3256":"none",display:"flex"}}>
         {[["monthly","📅","รายเดือน"],["summary","📊","รายปี"],["chart","📈","กราฟ"],["backup","💾","สำรอง"]].map(([id,ico,lbl])=>(
-          <button key={id} onClick={id==="backup"?()=>exportBackup(DB,fiscalYear):()=>setMainTab(id)}
+          <button key={id} onClick={id==="backup"?()=>{ if(!exportBackup(DB,fiscalYear)) setMsg({ok:false,text:"ยังไม่มีข้อมูลให้สำรอง"}); }:()=>setMainTab(id)}
             style={{flex:1,border:"none",borderTop:`2px solid ${mainTab===id&&id!=="backup"?T.gold:"transparent"}`,background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 0 6px",gap:2,color:mainTab===id&&id!=="backup"?"#fff":"rgba(255,255,255,0.45)",fontFamily:"inherit",transition:"color .15s"}}>
             <span style={{fontSize:20}}>{ico}</span>
             <span style={{fontSize:9,fontWeight:500,letterSpacing:"0.02em"}}>{lbl}</span>
