@@ -9,6 +9,7 @@ import {
   initM, srtDays, addDayTbl, rmDayTbl,
   exportCSV, exportBackup,
   extractDayFromFilename, sanitizeNum, normalizeMonth,
+  readAndMaybeDownscale,
 } from './utils/helpers';
 import MTable   from './components/MTable';
 import ChartView from './components/ChartView';
@@ -290,20 +291,20 @@ export default function App() {
 
     setPdfLoading(true);
     try {
-      const b64 = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res((r.result as string).split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      // Downscale mobile photos so the payload + Anthropic processing time fit inside
+      // Vercel's serverless timeout; PDFs pass through unchanged.
+      const { b64, mimeType } = await readAndMaybeDownscale(file);
       const resp = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64: b64, mimeType: file.type }),
+        body: JSON.stringify({ fileBase64: b64, mimeType }),
         signal: localCtrl.signal,
       });
       let parsed: ExtractResponse;
-      try { parsed = await resp.json(); } catch { throw new Error('API ไม่ตอบสนอง — ตรวจสอบว่า API server รันอยู่'); }
+      try { parsed = await resp.json(); } catch {
+        // Include HTTP status so the user (and we) can tell 504 timeout vs other failures
+        throw new Error(`API ตอบไม่ครบ (HTTP ${resp.status}) — ${resp.status === 504 ? 'AI ประมวลผลนานเกินไป กรุณาลองรูปที่คมชัดกว่าเดิม' : 'กรุณาลองใหม่'}`);
+      }
       if(!resp.ok || parsed.error) throw new Error(parsed.error || 'เกิดข้อผิดพลาด');
       if(!Array.isArray(parsed?.rows)) throw new Error('ไม่พบข้อมูลในเอกสาร');
       if(cancelledRef.current) return;

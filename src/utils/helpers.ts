@@ -194,6 +194,53 @@ export function normalizeMonth(raw: string | null | undefined): string | null {
   return MONTH_ALIASES[t] || t;
 }
 
+// Downscale + re-encode an image on the client so mobile photos don't blow past
+// the Vercel serverless function timeout during Anthropic processing.
+// PDFs are returned unchanged. Long-edge capped at maxDim; JPEG quality is set to
+// keep municipal-doc text readable while shrinking a 5-8MB photo to ~300-700KB.
+export async function readAndMaybeDownscale(
+  file: File,
+  maxDim = 1600,
+  quality = 0.85,
+): Promise<{ b64: string; mimeType: string; sizeKb: number }> {
+  const readB64 = () => new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(((r.result as string).split(',')[1]) || '');
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  if (!file.type.startsWith('image/')) {
+    const b64 = await readB64();
+    return { b64, mimeType: file.type, sizeKb: Math.round(b64.length * 0.75 / 1024) };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('อ่านรูปไม่ได้'));
+      i.src = url;
+    });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    // If already small enough AND under ~600KB, ship original bytes untouched
+    if (scale === 1 && file.size < 600_000) {
+      const b64 = await readB64();
+      return { b64, mimeType: file.type, sizeKb: Math.round(b64.length * 0.75 / 1024) };
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('canvas ไม่พร้อมใช้งาน');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    const b64 = dataUrl.split(',')[1] || '';
+    return { b64, mimeType: 'image/jpeg', sizeKb: Math.round(b64.length * 0.75 / 1024) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Normalize a user-typed / pasted cell value into a well-formed decimal string
 // - transliterates Thai digits (๐-๙) → Arabic (0-9) so Thai-IME users don't lose input
 // - strips anything that isn't a digit or dot (drops sign, commas, spaces)
