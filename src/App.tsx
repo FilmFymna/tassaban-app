@@ -36,7 +36,9 @@ async function dbLoad(fy: string): Promise<DBState> {
   if(error) throw error;
   const out: DBState = {};
   (data||[]).forEach((r: { month: string; days: string[]; table_data: any; history: any[] }) => {
+    if (typeof r.month !== "string" || !r.month) return; // guard malformed rows
     const mon = r.month.includes("_") ? r.month.split("_")[1] : r.month;
+    if (!mon) return;
     out[mon] = { days: r.days||[], table: r.table_data||{}, history: r.history||[] };
   });
   return out;
@@ -97,7 +99,7 @@ export default function App() {
   const fileRef         = useRef<HTMLInputElement>(null);
   const importBackupRef = useRef<HTMLInputElement>(null);
   const dirty           = useRef<Set<string>>(new Set());
-  const undoRef         = useRef<{ mon: string; day: string; data: MonthData } | null>(null);
+  const undoRef         = useRef<{ mon: string; day: string; dayCells: {[org: string]: {p97: string; p3: string}}; historyEntries: any[] } | null>(null);
   const undoTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef    = useRef<boolean>(false);
   const pendingMonRef   = useRef<string>(currentMonth());
@@ -105,6 +107,7 @@ export default function App() {
   const abortCtrlRef    = useRef<AbortController | null>(null);
   const queueTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // I6
+  const monRef          = useRef<string>(currentMonth());
   const isMobile        = useIsMobile();
 
   const T = useMemo(() => mkTheme(isDark), [isDark]);
@@ -147,6 +150,7 @@ export default function App() {
   // Sync DB to ref for save snapshot
   const DBRef = useRef<DBState>(DB);
   useEffect(() => { DBRef.current = DB; }, [DB]);
+  useEffect(() => { monRef.current = mon; }, [mon]);
 
   const savingRef = useRef<SavingState>("");
   useEffect(() => { savingRef.current = saving; }, [saving]);
@@ -214,7 +218,12 @@ export default function App() {
         setMsg({ ok: false, text: `❌ บันทึกไม่สำเร็จ — แก้ internet แล้วกด retry` });
       }
     }, 1200);
-    return () => { cancelled = true; clearTimeout(t); }; // BUG-2: cleanup sets cancelled
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      // Reset badge if a save was in-flight so user isn't stuck on "บันทึก..." forever
+      if(savingRef.current === "saving") setSaving("");
+    };
   }, [DB, ready, fiscalYear]);
 
   const pushDay = useCallback((d: string, mo?: string) => {
@@ -227,7 +236,12 @@ export default function App() {
     setDB(prev => {
       const snapshot = prev[mon];
       if(snapshot) {
-        undoRef.current = { mon, day:d, data: JSON.parse(JSON.stringify(snapshot)) };
+        // Capture only the deleted day's cells + history entries (not entire month),
+        // so intervening edits to other days survive an Undo.
+        const dayCells: {[org: string]: {p97: string; p3: string}} = {};
+        ALL.forEach(o => { const cell = snapshot.table[o]?.[d]; dayCells[o] = { p97: cell?.p97||"", p3: cell?.p3||"" }; });
+        const historyEntries = snapshot.history.filter((h: any) => h.day === d);
+        undoRef.current = { mon, day:d, dayCells, historyEntries };
         setUndoAvail(true);
         if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
         undoTimerRef.current = setTimeout(() => { undoRef.current = null; setUndoAvail(false); }, 8000);
@@ -235,7 +249,6 @@ export default function App() {
       const updated = {...prev};
       const c = prev[mon];
       if(c) updated[mon] = { ...c, days:c.days.filter((x:string)=>x!==d), table:rmDayTbl({...c.table},d), history:c.history.filter((h:any)=>h.day!==d) };
-      // BUG-3: mark dirty inside setDB callback so we use the correct mon from closure
       dirty.current.add(mon);
       return updated;
     });
@@ -252,7 +265,8 @@ export default function App() {
     abortCtrlRef.current?.abort();
     cancelledRef.current = false;
     pendingMonRef.current = mon; // BUG-1: capture mon at extract start to avoid stale closure
-    preSwitchMonRef.current = mon; // capture for cancel revert (fix-6)
+    // Note: preSwitchMonRef is captured ONCE at batch entry (handlePdfPick / handleFilesSelected),
+    // not per-file, so cancel-mid-batch reverts to the true pre-batch month.
     const localCtrl = new AbortController(); // I4: local controller — finally checks ownership
     abortCtrlRef.current = localCtrl; // fix-2: real fetch cancellation
     setPendingPdf(file);
@@ -320,19 +334,21 @@ export default function App() {
   const handlePdfPick = useCallback((file: File | undefined | null) => {
     if(!file) return;
     if(!file.type.match(/^(application\/pdf|image\/)/)) { setMsg({ok:false,text:"รองรับเฉพาะ PDF และรูปภาพ"}); return; }
+    preSwitchMonRef.current = mon; // batch-of-1: capture origin month for cancel revert
     startExtract(file);
-  }, [startExtract]);
+  }, [startExtract, mon]);
 
   // Item 9: handle multiple files → queue
   const handleFilesSelected = useCallback((files: FileList | null) => {
     if(!files || files.length === 0) return;
     const arr = Array.from(files).filter(f => f.type.match(/^(application\/pdf|image\/)/));
     if(!arr.length) { setMsg({ok:false,text:"รองรับเฉพาะ PDF และรูปภาพ"}); return; }
+    preSwitchMonRef.current = mon; // batch entry: capture origin month once for cancel revert
     if(arr.length === 1) { startExtract(arr[0]); return; }
     // Multiple files: process first, queue the rest
     setPdfQueue(arr.slice(1));
     startExtract(arr[0]);
-  }, [startExtract]);
+  }, [startExtract, mon]);
 
   // Submit day modal — uses pre-loaded result if available, else error
   const handleDaySubmit = useCallback((dayStr: string) => {
@@ -358,14 +374,23 @@ export default function App() {
       setConfirmDialog({
         message: `⚠️ วันที่ ${dayStr} เดือน${activeMon} มีข้อมูลอยู่แล้ว\nต้องการแทนที่มั้ย?`,
         onConfirm: proceed,
-        // I1: revert auto-switched month when user cancels the replace prompt
-        onCancel: () => { setPendingResult(null); setPendingPdf(null); setPdfQueue([]); setMon(preSwitchMonRef.current); },
+        onCancel: () => {
+          setPendingResult(null); setPendingPdf(null);
+          if(monRef.current === pendingMonRef.current) setMon(preSwitchMonRef.current);
+          // Advance queue instead of dropping it silently
+          if(pdfQueue.length > 0) {
+            const [next, ...rest] = pdfQueue;
+            setPdfQueue(rest);
+            if(queueTimerRef.current) clearTimeout(queueTimerRef.current);
+            queueTimerRef.current = setTimeout(() => startExtract(next), 300);
+          }
+        },
       });
       return;
     }
 
     proceed();
-  }, [pendingResult, getM]);
+  }, [pendingResult, getM, pdfQueue, startExtract]);
 
   // Item 8: validate numbers + save
   const confirmReview = useCallback(() => {
@@ -378,8 +403,16 @@ export default function App() {
       setReviewData(null);
     } else {
       setM(activeMon, c => {
-        const nd = c.days.includes(dayStr) ? c.days : srtDays([...c.days, dayStr]);
+        const isReplace = c.days.includes(dayStr);
+        const nd = isReplace ? c.days : srtDays([...c.days, dayStr]);
         const nt = addDayTbl({...c.table}, dayStr);
+        // On "replace", wipe only orgs the new PDF actually mentions — preserves manual entries
+        // for orgs Claude didn't extract, while still clearing stale values for orgs being re-imported.
+        if(isReplace) {
+          const wipeSet = new Set<string>();
+          parsed.rows.forEach(r => { const f = findOrg(r.matched || r.name); if(f) wipeSet.add(f); });
+          wipeSet.forEach(o => { nt[o] = {...nt[o], [dayStr]: {p97:"",p3:""}}; });
+        }
         parsed.rows.forEach(r => {
           const f = findOrg(r.matched || r.name);
           if(f) {
@@ -417,7 +450,8 @@ export default function App() {
       const text = await file.text();
       const lines = text.replace(/^﻿/, '').split('\n').filter(l => l.trim());
       const rows = lines.slice(1).map(line => {
-        const cols = line.match(/"([^"]*)"/g)?.map(c => c.slice(1,-1)) || [];
+        // Handle RFC-4180 escaped quotes: "" inside a value represents a literal "
+        const cols = line.match(/"((?:[^"]|"")*)"/g)?.map(c => c.slice(1,-1).replace(/""/g, '"')) || [];
         return { fy:cols[0], mon:cols[1], day:cols[2], org:cols[3], p97:cols[4]||'', p3:cols[5]||'' };
       }).filter(r => r.mon && r.day && r.org);
       if(!rows.length) { setMsg({ ok:false, text:'❌ ไม่พบข้อมูลในไฟล์' }); return; }
@@ -436,15 +470,15 @@ export default function App() {
       const skipped = skippedInvalid + skippedUnknownOrg;
       setDB(prev => {
         const next: DBState = {...prev};
-        const copied = new Set<string>(); // fix-5: track deep-copied months
+        // Full-replace semantics for days/table on first touch of a month in this backup —
+        // stale cells/days absent from the CSV are cleared. History (import log) is preserved
+        // from the prior state since backups don't carry it, and losing it would hide past imports.
+        const wiped = new Set<string>();
         validRows.forEach(({ mon:rowMon, org, p97, p3, _dayNum }) => {
           const dayKey = String(_dayNum); // I5: normalize day key (strip leading zeros etc.)
-          if(!next[rowMon]) {
-            next[rowMon] = { days:[], table:{}, history:[] };
-            copied.add(rowMon);
-          } else if(!copied.has(rowMon)) {
-            next[rowMon] = JSON.parse(JSON.stringify(next[rowMon])); // deep copy before mutating
-            copied.add(rowMon);
+          if(!wiped.has(rowMon)) {
+            next[rowMon] = { days:[], table:{}, history: prev[rowMon]?.history || [] };
+            wiped.add(rowMon);
           }
           const c = next[rowMon];
           if(!c.days.includes(dayKey)) c.days = [...c.days, dayKey];
@@ -456,9 +490,10 @@ export default function App() {
         });
         return next;
       });
+      const written = rows.length - skipped;
       const summary = skipped > 0
-        ? `✅ Restore สำเร็จ! ${rows.length} แถว (ข้าม ${skipped} แถวเนื่องจาก org ไม่ตรง, ปี ${restoredFy})`
-        : `✅ Restore สำเร็จ! ${rows.length} แถว (ปี ${restoredFy})`;
+        ? `✅ Restore สำเร็จ! ${written} แถว (ข้าม ${skipped} แถวเนื่องจาก org ไม่ตรง, ปี ${restoredFy})`
+        : `✅ Restore สำเร็จ! ${written} แถว (ปี ${restoredFy})`;
       setMsg({ ok:true, text: summary });
     } catch(e) {
       setMsg({ ok:false, text:`❌ อ่านไฟล์ไม่ได้: ${(e as Error).message}` });
@@ -479,7 +514,8 @@ export default function App() {
   const cancelPdfLoad = useCallback(() => {
     abortCtrlRef.current?.abort(); // fix-2: actually cancel in-flight HTTP request
     cancelledRef.current = true;
-    setMon(preSwitchMonRef.current); // fix-6: revert month if auto-switched
+    if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; }
+    if(monRef.current === pendingMonRef.current) setMon(preSwitchMonRef.current);
     setPendingPdf(null);
     setPendingResult(null);
     setPdfQueue([]);
@@ -492,10 +528,20 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if(e.key === 'Escape') {
         // BUG-27: close one layer at a time (topmost first)
-        if(showDayModal) { cancelledRef.current = true; setShowDayModal(false); setMon(preSwitchMonRef.current); setPdfDay(""); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }
+        if(showDayModal) {
+          cancelledRef.current = true;
+          if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; }
+          setShowDayModal(false);
+          if(monRef.current === pendingMonRef.current) setMon(preSwitchMonRef.current);
+          setPdfDay(""); setPendingPdf(null); setPendingResult(null); setPdfQueue([]);
+        }
         else if(pdfLoading) { cancelPdfLoad(); }
         else if(confirmDialog) { confirmDialog.onCancel?.(); setConfirmDialog(null); }
-        else if(reviewData) { setReviewData(null); setPdfQueue([]); setMon(preSwitchMonRef.current); }
+        else if(reviewData) {
+          setReviewData(null); setPdfQueue([]);
+          if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; }
+          if(monRef.current === pendingMonRef.current) setMon(preSwitchMonRef.current);
+        }
         else if(msg) setMsg(null);
       }
     };
@@ -567,7 +613,15 @@ export default function App() {
             {undoAvail&&(
               <button onClick={()=>{
                 const u=undoRef.current; if(!u) return;
-                setDB(prev=>({...prev,[u.mon]:u.data}));
+                setDB(prev => {
+                  const c = prev[u.mon]||initM();
+                  const days = c.days.includes(u.day) ? c.days : srtDays([...c.days, u.day]);
+                  const table = {...c.table};
+                  ALL.forEach(o => { table[o] = {...(table[o]||{}), [u.day]: {...u.dayCells[o]}}; });
+                  const history = [...c.history.filter((h:any) => h.day !== u.day), ...u.historyEntries]
+                    .sort((a:any,b:any) => parseInt(a.day) - parseInt(b.day));
+                  return {...prev, [u.mon]: {...c, days, table, history}};
+                });
                 dirty.current.add(u.mon); undoRef.current=null;
                 setUndoAvail(false);
                 if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -619,7 +673,7 @@ export default function App() {
                     autoFocus
                     style={{width:"100%",padding:"12px",borderRadius:10,border:`2px solid ${pdfDay?T.blue:T.border2}`,background:T.card2,color:T.text,fontFamily:"inherit",fontSize:22,textAlign:"center",boxSizing:"border-box",marginBottom:16,outline:"none"}}/>
                   <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>{ cancelledRef.current = true; setShowDayModal(false); setMon(preSwitchMonRef.current); setPdfDay(""); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
+                    <button onClick={()=>{ cancelledRef.current = true; if(queueTimerRef.current) { clearTimeout(queueTimerRef.current); queueTimerRef.current = null; } setShowDayModal(false); if(monRef.current === pendingMonRef.current) setMon(preSwitchMonRef.current); setPdfDay(""); setPendingPdf(null); setPendingResult(null); setPdfQueue([]); }} style={{flex:1,padding:"9px 0",border:`1px solid ${T.border}`,borderRadius:6,background:"transparent",color:T.textMed,cursor:"pointer",fontFamily:"inherit",fontSize:13}}>ยกเลิก</button>
                     <button onClick={()=>{if(pdfDay)handleDaySubmit(String(parseInt(pdfDay)));}} disabled={!pdfDay}
                       style={{flex:2,padding:"9px 0",background:pdfDay?T.blue:T.border2,color:"#fff",border:"none",borderRadius:6,cursor:pdfDay?"pointer":"default",fontFamily:"inherit",fontSize:14,fontWeight:700}}>
                       ยืนยัน
@@ -816,7 +870,7 @@ export default function App() {
               {pdfQueue.length>0&&<span style={{color:T.gold,fontWeight:700,marginLeft:8}}>📂 คิวต่อไป: {pdfQueue.length} ไฟล์</span>}
             </div>
             <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>{setReviewData(null);setPdfQueue([]);setMon(preSwitchMonRef.current);}} style={{flex:1,padding:'8px 0',border:`1px solid ${T.border}`,borderRadius:6,background:'transparent',color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
+              <button onClick={()=>{setReviewData(null);setPdfQueue([]);if(queueTimerRef.current){clearTimeout(queueTimerRef.current);queueTimerRef.current=null;}if(monRef.current===pendingMonRef.current)setMon(preSwitchMonRef.current);}} style={{flex:1,padding:'8px 0',border:`1px solid ${T.border}`,borderRadius:6,background:'transparent',color:T.textMed,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
               <button onClick={confirmReview} style={{flex:2,padding:'8px 0',background:T.blue,color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:700}}>บันทึก</button>
             </div>
           </div>

@@ -31,6 +31,12 @@ export function findOrg(name: string | null | undefined): string | null {
   if(!name) return null;
   // I8: strip leading list-noise (e.g. "1. ", "12) ") so OCR'd numbered lists match
   const cleaned = name.replace(/^[\s\d\.\)\-:]+/, "");
+  // Constrain scope by prefix category to disambiguate near-collisions like
+  // ห้วยขะยูง (TESSABAN) vs ห้วยขะยุง (OBT) — 1-char diff would otherwise trip the 0.15 margin.
+  // If the input has no clear prefix, fall back to full ALL.
+  const scope: string[] = /^(เทศบาล|ทบ\.|ทต\.|ทน\.|ทม\.)/.test(cleaned) ? TESSABAN
+    : /^(องค์การบริหารส่วนตำบล|อบต)/.test(cleaned) ? OBT
+    : ALL;
   const nm = (s: string) => s.replace(/\s+/g,"")
     .replace("องค์การบริหารส่วนตำบล","").replace("เทศบาลนคร","เมือง")
     .replace("เทศบาลตำบล","ตำบล").replace("เทศบาลเมือง","เมือง")
@@ -38,7 +44,7 @@ export function findOrg(name: string | null | undefined): string | null {
   const n = nm(cleaned);
   if(!n) return null;
   // exact-match-on-normalized-name is primary
-  const exact = ALL.find(o => nm(o) === n);
+  const exact = scope.find(o => nm(o) === n);
   if(exact) return exact;
   if(n.length < 3) return null;
   // Fallback: score every org by LCS-length / max-length. To avoid the old substring+ratio
@@ -47,7 +53,7 @@ export function findOrg(name: string | null | undefined): string | null {
   //   2. best beats second-best by margin >= 0.15 (disambiguation guard — return null on ties)
   let best = { org: "", score: 0 };
   let second = { org: "", score: 0 };
-  for(const o of ALL) {
+  for(const o of scope) {
     const m = nm(o);
     if(m.length < 3) continue;
     const score = lcsLength(m, n) / Math.max(m.length, n.length);
@@ -96,18 +102,19 @@ export function exportCSV(mon: string, days: string[], table: OrgTable): void {
     const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97??"", table[org]?.[d]?.p3??""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
-    row.push(r97, r3, r97+r3); rows.push(row);
+    row.push(n2(r97), n2(r3), n2(r97+r3)); rows.push(row);
   });
   rows.push(["อบต."]);
   OBT.forEach(org => {
     const row: (string | number)[] = [org];
     days.forEach(d => { row.push(table[org]?.[d]?.p97??"", table[org]?.[d]?.p3??""); });
     const r97=sR(table,org,days,"p97"), r3=sR(table,org,days,"p3");
-    row.push(r97, r3, r97+r3); rows.push(row);
+    row.push(n2(r97), n2(r3), n2(r97+r3)); rows.push(row);
   });
   const tot: (string | number)[] = ["รวมทั้งหมด"];
-  days.forEach(d => { tot.push(sD(table,d,ALL,"p97"), sD(table,d,ALL,"p3")); });
-  tot.push(sG(table,ALL,days,"p97"), sG(table,ALL,days,"p3"), sG(table,ALL,days,"p97")+sG(table,ALL,days,"p3"));
+  days.forEach(d => { tot.push(n2(sD(table,d,ALL,"p97")), n2(sD(table,d,ALL,"p3"))); });
+  const g97 = sG(table,ALL,days,"p97"), g3 = sG(table,ALL,days,"p3");
+  tot.push(n2(g97), n2(g3), n2(g97+g3));
   rows.push(tot);
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
   downloadBlob(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8;"}), `ยอดรายวัน_${mon}.csv`);
@@ -174,5 +181,7 @@ export function sanitizeNum(v: number | string | null | undefined): string {
   const n = parseFloat(String(v).replace(/,/g, ""));
   if (isNaN(n) || n < 0) return "";
   if (n === 0) return ""; // M3: keep empty cells empty
-  return String(parseFloat(n.toFixed(2)));
+  const rounded = parseFloat(n.toFixed(2));
+  if (!isFinite(rounded) || rounded === 0) return ""; // guard Infinity + tiny fractions rounding to 0
+  return String(rounded);
 }
