@@ -109,8 +109,14 @@ export default async function handler(req, res) {
     try { parsed = JSON.parse(jsonStr); } catch (e) { return res.status(500).json({ error: 'JSON parse failed', raw: jsonStr.slice(0, 200) }); }
     return res.status(200).json(parsed);
   } catch (e) {
-    if (e?.name === 'AbortError') return; // client hung up or timeout — no response needed
+    // AbortError can fire from either the 25s timeout OR client req.on('close').
+    // Always send a JSON response (safe even on closed socket) so the client's
+    // resp.json() never fails and never surfaces the misleading "API ไม่ตอบสนอง".
+    if (e?.name === 'AbortError') {
+      if (!res.headersSent) return res.status(504).json({ error: 'AI ตอบช้าเกินไป — กรุณาลองรูปที่ขนาดเล็กลง หรือลองใหม่' });
+      return;
+    }
     console.error('extract handler error:', e);
-    return res.status(500).json({ error: e.message || 'Internal error' });
+    if (!res.headersSent) return res.status(500).json({ error: e.message || 'Internal error' });
   }
 }
